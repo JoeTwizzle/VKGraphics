@@ -3,6 +3,7 @@ using OpenTK.Graphics;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
 using OpenTK.Platform;
+using OpenTK.Windowing.Common;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -18,9 +19,10 @@ internal abstract class GameWindow
     public Vector2i FramebufferSize { get; private set; }
     public WindowHandle Window { get; protected set; }
     bool initialized;
+    GraphicsApi GraphicsApi;
     public GameWindow(GraphicsApi graphicsApi)
     {
-
+        GraphicsApi = graphicsApi;
         ToolkitOptions options = new()
         {
             // ApplicationName is the name of the application
@@ -34,7 +36,53 @@ internal abstract class GameWindow
         {
             VKLoader.Init();
         }
-        GraphicsApiHints contextSettings = graphicsApi switch
+        
+        
+        //Toolkit.Keyboard.
+        //Register event handlers
+        EventQueue.EventRaised += EventRaised;
+
+    }
+    const double TicksToSeconds = 1e-7;
+    long prev = Stopwatch.GetTimestamp();
+    void EventRaised(PalHandle? handle, PlatformEventType type, EventArgs args)
+    {
+        if (args is CloseEventArgs closeArgs)
+        {
+            // Destroy the Window that the user wanted to close.
+            Toolkit.Window.Destroy(closeArgs.Window);
+        }
+        else if (args is WindowFramebufferResizeEventArgs framebufferResizeEventArgs)
+        {
+            FramebufferSize = framebufferResizeEventArgs.NewFramebufferSize;
+            sizeChanged = true;
+
+            //FramebufferResized(new(framebufferResizeEventArgs.NewFramebufferSize.X, framebufferResizeEventArgs.NewFramebufferSize.Y));
+        }
+        else if (args is WindowResizeEventArgs resizeEventArgs)
+        {
+            FramebufferSize = resizeEventArgs.NewClientSize;
+            sizeChanged = true;
+            //Toolkit.Window.ProcessEvents(false);
+        }
+    }
+
+    void UpdateLoop()
+    {
+        
+        yay = true;
+        while (!Toolkit.Window.IsWindowDestroyed(Window))
+        {
+            Toolkit.Window.ProcessEvents(false);
+        }
+    }
+    bool yay;
+    bool sizeChanged;
+    public double DeltaTimeFull;
+    public float DeltaTime;
+    void InitWindow()
+    {
+        GraphicsApiHints contextSettings = GraphicsApi switch
         {
             GraphicsApi.Vulkan => new VulkanGraphicsApiHints(),
             GraphicsApi.OpenGL => new OpenGLGraphicsApiHints()
@@ -50,7 +98,7 @@ internal abstract class GameWindow
         };
         Window = Toolkit.Window.Create(contextSettings);
 
-        switch (graphicsApi)
+        switch (GraphicsApi)
         {
             case GraphicsApi.OpenGL:
                 {
@@ -69,33 +117,11 @@ internal abstract class GameWindow
             default:
                 break;
         }
-        //Toolkit.Keyboard.
-        //Register event handlers
-        EventQueue.EventRaised += EventRaised;
-
     }
 
-    void EventRaised(PalHandle? handle, PlatformEventType type, EventArgs args)
-    {
-        if (args is CloseEventArgs closeArgs)
-        {
-            // Destroy the Window that the user wanted to close.
-            Toolkit.Window.Destroy(closeArgs.Window);
-        }
-        else if (args is WindowFramebufferResizeEventArgs framebufferResizeEventArgs)
-        {
-            if (initialized)
-            {
-                FramebufferSize = framebufferResizeEventArgs.NewFramebufferSize;
-                FramebufferResized(new(framebufferResizeEventArgs.NewFramebufferSize.X, framebufferResizeEventArgs.NewFramebufferSize.Y));
-            }
-        }
-    }
-    public double DeltaTimeFull;
-    public float DeltaTime;
     public void Run()
     {
-        const double TicksToSeconds = 1e-7;
+        InitWindow();
         DeltaTimeFull = double.Epsilon;
         DeltaTime = MathF.Max(DeltaTime, float.Epsilon);
         Toolkit.Window.GetFramebufferSize(Window, out var a);
@@ -108,32 +134,23 @@ internal abstract class GameWindow
         Toolkit.Window.SetBorderStyle(Window, WindowBorderStyle.ResizableBorder);
         // Bring the Window out of the default Hidden Window mode
         Toolkit.Window.SetMode(Window, WindowMode.Normal);
+        //Toolkit.Window.SetFullscreenDisplay(Window, null);
         Toolkit.Window.GetFramebufferSize(Window, out a);
-        //Toolkit.Window.ProcessEvents(false);
-        //Toolkit.Window.ProcessEvents(false);
-        //Toolkit.Window.ProcessEvents(false);
-        //Toolkit.Window.ProcessEvents(false);
-        //Toolkit.Window.ProcessEvents(false);
-        //Toolkit.Window.ProcessEvents(false);
-        //Toolkit.Window.ProcessEvents(false);
-        //Toolkit.Window.ProcessEvents(false);
-        //Toolkit.Window.ProcessEvents(false);
-        //Toolkit.Window.ProcessEvents(false);
-        //Toolkit.Window.ProcessEvents(false);
-        //Toolkit.Window.ProcessEvents(false);
-        //Toolkit.Window.ProcessEvents(false);
-        FramebufferResized(a);
+        Toolkit.Window.SetTransparencyMode(Window, WindowTransparencyMode.Opaque);
         InitRenderer();
-        initialized = true;
+        FramebufferResized(a);
         while (true)
         {
             long current = Stopwatch.GetTimestamp();
             DeltaTimeFull = (current - prev) * TicksToSeconds; //Ticks to seconds constant
             DeltaTime = (float)DeltaTimeFull;
-            prev = current;
-            // This will process events for all windows and
-            //  post those events to the event queue.
+            prev = current; 
             Toolkit.Window.ProcessEvents(false);
+            if (sizeChanged)
+            {
+                FramebufferResized(new(FramebufferSize.X, FramebufferSize.Y));
+                sizeChanged = false;
+            }
             // Check if the Window was destroyed after processing events.
             if (Toolkit.Window.IsWindowDestroyed(Window))
             {

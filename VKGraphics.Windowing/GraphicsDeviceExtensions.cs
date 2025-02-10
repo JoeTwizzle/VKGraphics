@@ -12,10 +12,6 @@ using VKGraphics.Windowing.Vulkan;
 namespace VKGraphics.Windowing;
 public static class GraphicsDeviceExtensions
 {
-    /// <summary>
-    ///     Retrieves the main Swapchain for this device. This property is only valid if the device was created with a main
-    ///     Swapchain, and will return null otherwise.
-    /// </summary>
     public static unsafe void SwapBuffers(this GraphicsDevice graphicsDevice, Swapchain swapchain)
     {
         var vkSc = Util.AssertSubtype<Swapchain, VkSwapchain>(swapchain);
