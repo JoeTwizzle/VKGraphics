@@ -1,0 +1,261 @@
+﻿#version 460
+#define localSizeX  8
+#define localSizeY  8
+#define localSizeZ  1
+#define EPSILON 1e-4
+#define FLT_MAX 3.40282347e+38
+#define FLT_MIN -3.40282347e+38
+#define MAX_DEPTH 1000000
+#define PI 3.14159265
+#define TWO_PI 6.28318530718
+#define ONE_OVER_PI (1.0 / PI)
+#define ONE_OVER_2PI (1.0 / TWO_PI)
+#define saturate(value) clamp(value, 0.0, 1.0)
+
+layout(local_size_x = localSizeX, local_size_y = localSizeY) in;
+
+struct Ray
+{
+    vec3 origin;
+    vec3 direction;
+};
+
+struct SourceBox
+{
+    ivec4 BBoxA; //min xyz , max x
+    ivec4 BBoxB; //max yz , bufferoffsetHi, bufferoffsetLo
+};
+
+layout(std140, set = 0, binding = 0) uniform CamBuf
+{
+    mat4 _CameraToWorld;
+    mat4 _CameraInverseProjection;
+} _CameraProperites;
+
+layout(std140, set = 1, binding = 0) uniform VoxGridInfo
+{
+    float MinValue;
+    float MaxValue;
+    uint Size;
+    uint Depth;
+    uvec4 Dimensions;
+} _VoxelGridInfo;
+
+layout(std430, set = 1, binding = 1) buffer VoxDataBuf
+{
+    uint[] Values;
+} _VoxelData;
+
+layout(std430, set = 1, binding = 2) buffer VoxValueBuf
+{
+    float[] Values;
+} _VoxelValues;
+
+
+layout(set = 2, rgba8, binding = 0) uniform image2D screen;
+
+// --- MATLAB Jet Colour Scheme ---
+vec3 SpectralJet(float x)
+{
+    vec3 c;
+    if (x < 0.25)
+        c = vec3(0.0, 4.0 * x, 1.0);
+    else if (x < 0.5)
+        c = vec3(0.0, 1.0, 1.0 + 4.0 * (0.25 - x));
+    else if (x < 0.75)
+        c = vec3(4.0 * (x - 0.5), 1.0, 0.0);
+    else
+        c = vec3(1.0, 1.0 + 4.0 * (0.75 - x), 0.0);
+
+    // Clamp colour components in [0,1]
+    return saturate(c);
+}
+
+Ray CreateRay(vec3 origin, vec3 direction)
+{
+    Ray ray;
+    ray.origin = origin;
+    ray.direction = direction;
+    return ray;
+}
+
+Ray CreateCameraRay(vec2 rayCoords)
+{
+    // Transform the camera origin to world space
+    const vec3 origin = (_CameraProperites._CameraToWorld * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+
+    // Invert the perspective projection of the view-space position
+    vec3 direction = (_CameraProperites._CameraInverseProjection * vec4(rayCoords, 0.0, 1.0)).xyz;
+
+    // Transform the direction from camera to world space and normalize
+    direction = normalize((_CameraProperites._CameraToWorld * vec4(direction, 0.0)).xyz);
+    return CreateRay(origin, direction);
+}
+
+uint part1by2(in uint n){
+    n &= 0x000003ff;
+    n = (n ^ (n << 16)) & 0xff0000ff;
+    n = (n ^ (n << 8)) & 0x0300f00f;
+    n = (n ^ (n << 4)) & 0x030c30c3;
+    n = (n ^ (n << 2)) & 0x09249249;
+    return n;
+}
+
+uvec3 PadTwoZerosEx(in uvec3 n)
+{
+    //Mask to 0-1023
+    n &= 0x000003ff;
+
+    n = (n ^ (n << 16)) & 0xff0000ff;
+    n = (n ^ (n << 8)) & 0x0300f00f;
+    n = (n ^ (n << 4)) & 0x030c30c3;
+    n = (n ^ (n << 2)) & 0x09249249;
+    return n;
+}
+
+uint Interleave3(in uvec3 pos)
+{
+     uvec3 val = PadTwoZerosEx(pos);
+    return val.z | (val.y << 1) | (val.x << 2);
+    //return PadTwoZeros(pos.z) | (PadTwoZeros(pos.y) << 1) | (PadTwoZeros(pos.x) << 2);
+}
+
+uint LayerSize(uint layer)
+{
+    return 1 << (layer * 3); //-> 1, 8, 64, 512, 4096
+}
+
+uint GetOctalDigit(uint treeIndex, uint layer)
+{
+    return (treeIndex >> (layer * 3)) & 7; // range 0-8 octant select
+}
+
+bool IntersectBox(vec3 rayOrigin, vec3 invDir, vec3 boxMin, vec3 boxMax, out float tNear, out float tFar) 
+{
+    vec3 tNearCandidate = (boxMin - rayOrigin) * invDir;
+    vec3 tFarCandidate = (boxMax - rayOrigin) * invDir;
+
+    vec3 tMin = min(tNearCandidate, tFarCandidate);
+    vec3 tMax = max(tNearCandidate, tFarCandidate);
+
+    tNear = max(max(tMin.x, tMin.y), tMin.z);
+    tFar = min(min(tMax.x, tMax.y), tMax.z);
+
+    return tNear <= tFar && tFar > 0.0;
+}
+
+// Based of off https://www.shadertoy.com/view/4dX3zl and https://github.com/deibich/source-volume-renderer
+void main()
+{
+    ivec2 resolution = imageSize(screen);
+    ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
+    // PixelPos is out of range of texture
+    if(any(greaterThanEqual(pixelPos, resolution)))
+    {
+        return;
+    }
+    
+    // Transform pixel to [-1,1] range
+    vec2 uv = vec2((pixelPos + vec2(0.5, 0.5)) / vec2(resolution.x, resolution.y));
+    vec2 rayCoords = uv * 2.0 - 1.0;
+    
+    Ray ray = CreateCameraRay(rayCoords);
+
+    float maxValue = 0;
+    const vec3 invDir = 1.0 / ray.direction;
+
+    // Get the sourceData box
+    const uvec3 boxSize = uvec3(_VoxelGridInfo.Size);
+    const vec3 bSize = vec3(boxSize);
+    //Steps needed to reach the end of the volume cube (x+y+z iterations)
+    uint steps = uint(ceil(dot(vec3(1), bSize)));
+    
+    // Warp ray to begining of volume box
+    if (!(all(lessThanEqual(ray.origin, bSize)) && all(greaterThan(ray.origin, vec3(0)))))
+    {    
+        float firstHit;
+        float dummy;
+        if (IntersectBox(ray.origin, invDir, vec3(0), bSize, firstHit, dummy))
+        {
+            firstHit += 0.01;
+            ray.origin = ray.origin + ray.direction * firstHit;
+        }
+    }
+
+    uvec3 gridPos = uvec3(ray.origin);
+    const vec3 deltaDist = max(abs(invDir), 0.001);         // Percentage to step in per axis
+    const vec3 rayStepF = sign(ray.direction);              // Positive or Negative step
+    const vec3 blockOffset = (vec3(gridPos) - ray.origin);  // Difference between quantized position and actual position
+    const vec3 posDiff = rayStepF * blockOffset;            // Absolute Difference between quantized position and actual position
+    const vec3 absoluteStep = (rayStepF * 0.5) + 0.5;       // Bring step from -1 .. 1  to 0 .. 1
+    vec3 sideDist = (posDiff + absoluteStep) * deltaDist;   // Total absolute difference in positon from start
+
+    const uint layerCount = _VoxelGridInfo.Depth - 1;
+//    bool escaped = false;
+    while(steps > 0 && all(lessThan(gridPos, boxSize))) // Step thru octree
+    {                   
+        steps--;
+        uint treeIndex = Interleave3(gridPos); //slow              
+        uint layerStartOffset = 0;
+        uint neighbourCount = GetOctalDigit(treeIndex, layerCount); // most significant octal digit
+        for (uint i = 1; i <= _VoxelGridInfo.Depth; i++)
+        {
+            const uint bitIndex = layerStartOffset + neighbourCount; // index in bits
+            const uint arrayIndex = bitIndex >> 5;   // /64  uint array index
+            const uint shift = (bitIndex & 31);     // range 0-4 * 8 byte select
+            const uint value = _VoxelData.Values[arrayIndex] >> shift;
+            const bool hasChild = (value & 1) != 0;
+            
+            if(i == _VoxelGridInfo.Depth)
+            {
+                if(hasChild)
+                {
+                    float densityValue = _VoxelValues.Values[((gridPos.z) * _VoxelGridInfo.Dimensions.y + gridPos.y) * _VoxelGridInfo.Dimensions.x + gridPos.x];
+                    maxValue = max(densityValue, maxValue); 
+                }
+                const vec3 mask = step(sideDist.xyz, min(sideDist.yzx, sideDist.zxy));//Smallest axis to step in       
+                sideDist += mask * deltaDist;                               //Step along smallest direction & accumulate distance travelled
+                gridPos += ivec3(mask * rayStepF);                          //Step along smallest direction & accumulate integer distance    
+                break;
+            }
+            else if(!hasChild)
+            {
+//                uint stepSize = _VoxelGridInfo.Size >> i; // 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2
+                                                          // /1 /2 /4 /8
+                                                          // *1 *2
+                uint shift = _VoxelGridInfo.Depth - i;
+                //Calculate octant box size
+                const uvec3 octants = uvec3(gridPos >> shift);  //gridpos / stepSize
+                const vec3 minBox = vec3(octants << shift);  //octants * stepSize
+                const vec3 maxBox = vec3((uvec3(1) + octants) << shift);  //(octants+uvec3(1)) * stepSize
+
+                float near;
+                float far;
+                bool hit = IntersectBox(ray.origin, invDir, minBox, maxBox, near, far);
+                float maxHit = max(far+0.1, 0.01);
+                ray.origin = ray.origin + ray.direction * maxHit;
+                //Needed to avoid infinite steps due to float -> int conversion in glsl
+                if(any(lessThan(ray.origin, vec3(0))))
+                {
+                    steps = 0; 
+                    break;
+                }
+                gridPos = uvec3(ray.origin);
+                const vec3 nextBlockOffset = (vec3(gridPos) - ray.origin);          //Difference between quantized position and actual position
+                const vec3 nextPosDiff = rayStepF * nextBlockOffset;                //Difference between quantized position and actual position
+                sideDist = (nextPosDiff + absoluteStep) * deltaDist;                //Total absolute difference in positon from start
+                break;
+            }
+
+            const uint nextLayerNodes = neighbourCount * 8;
+            const uint childIndex = (treeIndex >> ((layerCount - i) * 3) & 7);
+            neighbourCount = nextLayerNodes + childIndex;
+            layerStartOffset += LayerSize(i);    
+        }                
+
+    }
+    
+    const vec3 mainColor = SpectralJet(maxValue / _VoxelGridInfo.MaxValue);
+    const vec3 contentColor = mix(vec3(0), mainColor, maxValue / _VoxelGridInfo.MaxValue); 
+    imageStore(screen, pixelPos, vec4(contentColor, 1.0));
+}

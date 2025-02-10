@@ -1,0 +1,275 @@
+#version 460
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#define localSizeX  8
+#define localSizeY  8
+#define localSizeZ  1
+
+#define EPSILON 1e-4
+#define FLT_MAX 3.40282347e+38
+#define FLT_MIN -3.40282347e+38
+#define MAX_DEPTH 1000000
+#define PI 3.14159265
+#define TWO_PI 6.28318530718
+#define ONE_OVER_PI (1.0 / PI)
+#define ONE_OVER_2PI (1.0 / TWO_PI)
+#define saturate(value) clamp(value, 0.0, 1.0)
+
+layout(local_size_x = localSizeX, local_size_y = localSizeY) in;
+
+struct Ray
+{
+    vec3 origin;
+    vec3 direction;
+};
+
+layout(std140, set = 0, binding = 0) uniform CamBuf
+{
+    mat4 _CameraToWorld;
+    mat4 _CameraInverseProjection;
+} _CameraProperites;
+
+layout(std430, set = 1, binding = 0) buffer VoxDataBuf
+{
+    uint64_t[] Values;
+} _VoxelData;
+
+layout(set = 2, rgba16f, binding = 0) uniform image2D screen;
+
+// --- MATLAB Jet Colour Scheme ---
+vec3 spectral_jet(float x)
+{
+    vec3 c;
+    if (x < 0.25)
+        c = vec3(0.0, 4.0 * x, 1.0);
+    else if (x < 0.5)
+        c = vec3(0.0, 1.0, 1.0 + 4.0 * (0.25 - x));
+    else if (x < 0.75)
+        c = vec3(4.0 * (x - 0.5), 1.0, 0.0);
+    else
+        c = vec3(1.0, 1.0 + 4.0 * (0.75 - x), 0.0);
+
+    // Clamp colour components in [0,1]
+    return saturate(c);
+}
+
+Ray CreateRay(vec3 origin, vec3 direction)
+{
+    Ray ray;
+    ray.origin = origin;
+    ray.direction = direction;
+    return ray;
+}
+
+Ray CreateCameraRay(vec2 rayCoords)
+{
+    // Transform the camera origin to world space
+    const vec3 origin = (_CameraProperites._CameraToWorld * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+
+    // Invert the perspective projection of the view-space position
+    vec3 direction = (_CameraProperites._CameraInverseProjection * vec4(rayCoords, 0.0, 1.0)).xyz;
+
+    // Transform the direction from camera to world space and normalize
+    direction = normalize((_CameraProperites._CameraToWorld * vec4(direction, 0.0)).xyz);
+    return CreateRay(origin, direction);
+}
+
+uvec3 PadTwoZerosEx(in uvec3 n)
+{
+    //Mask to 0-1023
+    n &= 0x000003ff;
+
+    n = (n ^ (n << 16)) & 0xff0000ff;
+    n = (n ^ (n << 8)) & 0x0300f00f;
+    n = (n ^ (n << 4)) & 0x030c30c3;
+    n = (n ^ (n << 2)) & 0x09249249;
+    return n;
+}
+
+uint Interleave3(in uvec3 pos)
+{
+     uvec3 val = PadTwoZerosEx(pos);
+    return val.z | (val.y << 1) | (val.x << 2);
+}
+
+const ivec3 NORMALS[6] = ivec3[6](
+    ivec3(-1, 0, 0),
+    ivec3( 1, 0, 0),
+    ivec3(0, -1, 0),
+    ivec3(0, 1, 0),
+    ivec3(0, 0, -1),
+    ivec3(0, 0, 1)
+);
+
+const vec3 FACE_COLOR[6] = vec3[6](
+    vec3(1.0, 0.0, 0.0), 
+    vec3(0.0, 1.0, 0.0), 
+    vec3(0.0, 0.0, 1.0), 
+    vec3(1.0, 1.0, 0.0), 
+    vec3(1.0, 0.0, 1.0), 
+    vec3(0.0, 1.0, 1.0)
+);
+
+vec3 stepMask(vec3 sideDist) 
+{
+    bvec3 mask;
+    bvec3 b1 = lessThan(sideDist.xyz, sideDist.yzx);
+    bvec3 b2 = lessThanEqual(sideDist.xyz, sideDist.zxy);
+    mask.z = b1.z && b2.z;
+    mask.x = b1.x && b2.x;
+    mask.y = b1.y && b2.y;
+    if(!any(mask)) // Thank you Spalmer
+        mask.z = true;
+        
+    return vec3(mask);
+}
+
+bvec3 andBVec(bvec3 n, bvec3 m) {
+    return bvec3(n.x && m.x, n.y && m.y, n.z && m.z);
+}
+
+const uint chunksPerAxis = (1024 / 4);
+const vec3 dirToSun = normalize(vec3(0.4, 0.5, 0.45));
+uvec4 traceRay(Ray ray)
+{
+    const vec3 inv_dir = 1.0 / (ray.direction);
+    uvec3 gridPos = uvec3(ivec3(ray.origin));
+
+    if (any(equal(ray.direction, vec3(0.0)))) // Avoid divide by zero when rayDir element is zero
+        ray.direction += vec3(equal(ray.direction, vec3(0.0))) * vec3(0.00001);
+
+    const vec3 rayStepF = sign(ray.direction);
+    const ivec3 rayStep = ivec3(rayStepF);   
+    const vec3 deltaDist = abs(vec3(length(ray.direction)) / ray.direction);
+    vec3 sideDist = (rayStepF * (vec3(gridPos) - ray.origin) + (rayStepF * 0.5) + 0.5) * deltaDist;
+
+    uint faceId = -1;
+    bool exit = false;
+    vec3 prevMask = step(sideDist.xyz, min(sideDist.yzx, sideDist.zxy));
+    for (int i = 0; !exit && i < 512; i++) 
+    {
+        float densityValue = 0;
+        if(any(lessThanEqual(uvec3(1024), gridPos))) { break; }
+        if(any(lessThan(gridPos, uvec3(0)))) { break; }
+
+        uvec3 chunkPos = (gridPos >> 2);
+        uint chunkIndex = chunkPos.z * chunksPerAxis * chunksPerAxis + chunkPos.y * chunksPerAxis + chunkPos.x;
+        //    const uint xMask = 0x24924924;
+        //    const uint yMask = 0x92492492;
+        //    const uint zMask = 0x49249249;
+        uint64_t chunk = _VoxelData.Values[chunkIndex];
+        
+        do
+        {            
+            vec3 mask = step(sideDist.xyz, min(sideDist.yzx, sideDist.zxy));
+//            if(all(equal(mask, vec3(0))))
+//            {
+//                mask.z = 1.0;
+//            }
+
+            if(chunk != 0ul)
+            {
+                uvec3 localGridPos = gridPos & 3;
+                uvec3 uMask = uvec3(prevMask);
+
+
+
+                //TODO: implement masking of potential steps
+
+                uint chunkTest = localGridPos.z * 4 * 4 + localGridPos.y * 4 + localGridPos.x;
+                uint64_t testPos = 1ul << chunkTest;
+                if((chunk & testPos) != 0ul)
+                {
+                    
+//                    uint negative = uint(any(andBVec(bvec3(prevMask), lessThan(ray.direction, vec3(0)))));
+                    uint negative = uint(
+                        any(
+                            bvec3(uMask & uvec3(
+                                lessThan(ray.direction, vec3(0))
+                            ))
+                        )
+                    );
+                    faceId = (uMask.y * 2) + (uMask.z * 4) + negative;                    
+                    return uvec4(gridPos, faceId);
+                }
+            }
+            sideDist += mask * deltaDist;            
+            gridPos += ivec3(mask) * rayStep;
+            prevMask = mask;
+            
+        } while(!exit && (gridPos >> 2) == chunkPos);
+    }
+    return uvec4(gridPos, -1);
+}
+const mat3 sRGBtoAP1 = mat3
+(
+	0.613097, 0.339523, 0.047379,
+	0.070194, 0.916354, 0.013452,
+	0.020616, 0.109570, 0.869815
+);
+
+vec3 getColorAtRay(Ray ray, out uvec4 result)
+{
+    const vec3 ambientLight = vec3(0.3, 0.3, 0.8) * 4 * sRGBtoAP1;
+    result = traceRay(ray);
+    vec3 color = vec3(0);
+    if(result.w != -1)
+    {
+        uvec3 position = result.xyz;
+        ivec3 normal = NORMALS[result.w];
+        
+        Ray shadowRay = Ray(vec3(position + normal), dirToSun);
+        uvec4 shadowResult = traceRay(shadowRay);
+        const vec3 surfaceColor = vec3(0.3, 0.8, 0.1) * sRGBtoAP1;
+        
+        float brightness = shadowResult.w == -1 ? 1.0 : 0.5;
+
+        float factor = saturate(dot(vec3(normal), dirToSun) * 0.5 + 1);
+
+        color = surfaceColor * ambientLight * brightness * factor;
+    }
+    else
+    {
+        color = ambientLight;
+    }
+    return color;
+}
+
+ivec3 getNormal(uint index)
+{
+    return NORMALS[index];
+}
+
+void main()
+{
+    ivec2 resolution = imageSize(screen);
+    ivec2 pixelPos = ivec2(gl_GlobalInvocationID.xy);
+    if(any(greaterThanEqual(pixelPos, resolution)))
+    {
+        return;
+    }
+    vec2 uv = vec2((pixelPos + vec2(0.5, 0.5)) / vec2(resolution.x, resolution.y));
+    vec2 rayCoords = uv * 2.0 - 1.0;
+
+    Ray ray = CreateCameraRay(rayCoords);
+    if (any(equal(ray.direction, vec3(0.0)))) // Avoid divide by zero when rayDir element is zero
+        ray.direction += vec3(equal(ray.direction, vec3(0.0))) * vec3(0.00001);
+
+    uvec4 hitResult;
+    vec3 color = getColorAtRay(ray, hitResult);
+
+    const float reflectivity = 0.03;
+    float attenuation = 1.0;
+    for(int i = 0; i < 1; i++)
+    {
+        if(hitResult.w != -1)
+        {
+            attenuation *= reflectivity;
+            ivec3 normal = getNormal(hitResult.w);
+            ray = Ray(hitResult.xyz + normal, reflect(ray.direction,vec3(normal)));
+
+            color += getColorAtRay(ray, hitResult) * attenuation;
+        }
+    }
+
+    imageStore(screen, pixelPos, vec4(color, 1.0));
+}
