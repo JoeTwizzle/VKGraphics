@@ -1,17 +1,15 @@
 ﻿using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace VKGraphics;
 
 public static class FormatSizeHelpers
 {
     /// <summary>
-    ///     Given a pixel format, returns the number of bytes required to store
-    ///     a single pixel.
-    ///     Compressed formats may not be used with this method as the number of
-    ///     bytes per pixel is variable.
+    /// Given a pixel format, returns the number of bytes required to store a single pixel.
     /// </summary>
-    /// <param name="format">An uncompressed pixel format</param>
-    /// <returns>The number of bytes required to store a single pixel in the given format</returns>
+    /// <param name="format">An uncompressed pixel format.</param>
+    /// <returns>The number of bytes required to store a single pixel in the given format.</returns>
     public static uint GetSizeInBytes(PixelFormat format)
     {
         switch (format)
@@ -31,7 +29,11 @@ public static class FormatSizeHelpers
             case PixelFormat.R8G8SNorm:
             case PixelFormat.R8G8UInt:
             case PixelFormat.R8G8SInt:
+            case PixelFormat.D16UNorm:
                 return 2;
+
+            case PixelFormat.D16UNormS8UInt:
+                return 3;
 
             case PixelFormat.R32UInt:
             case PixelFormat.R32SInt:
@@ -52,6 +54,7 @@ public static class FormatSizeHelpers
             case PixelFormat.R10G10B10A2UInt:
             case PixelFormat.R11G11B10Float:
             case PixelFormat.D24UNormS8UInt:
+            case PixelFormat.D32Float:
                 return 4;
 
             case PixelFormat.D32FloatS8UInt:
@@ -90,18 +93,20 @@ public static class FormatSizeHelpers
             case PixelFormat.Etc2R8G8B8A1UNorm:
             case PixelFormat.Etc2R8G8B8A8UNorm:
                 Debug.Fail("GetSizeInBytes should not be used on a compressed format.");
-                throw Illegal.Value<PixelFormat>();
+                return Illegal.Handle<PixelFormat, uint>();
 
-            default: throw Illegal.Value<PixelFormat>();
+            default:
+                return Illegal.Handle<PixelFormat, uint>();
         }
     }
 
     /// <summary>
-    ///     Given a vertex element format, returns the number of bytes required
-    ///     to store an element in that format.
+    /// Given a vertex element format, returns the number of bytes required
+    /// to store an element in that format.
     /// </summary>
-    /// <param name="format">A vertex element format</param>
-    /// <returns>The number of bytes required to store an element in the given format</returns>
+    /// <param name="format">A vertex element format.</param>
+    /// <returns>The number of bytes required to store an element in the given format.</returns>
+    [SuppressMessage("Style", "IDE0066:Convert switch statement to expression", Justification = "<Pending>")]
     public static uint GetSizeInBytes(VertexElementFormat format)
     {
         switch (format)
@@ -112,7 +117,6 @@ public static class FormatSizeHelpers
             case VertexElementFormat.SByte2:
             case VertexElementFormat.Half1:
                 return 2;
-
             case VertexElementFormat.Float1:
             case VertexElementFormat.UInt1:
             case VertexElementFormat.Int1:
@@ -126,7 +130,6 @@ public static class FormatSizeHelpers
             case VertexElementFormat.Short2:
             case VertexElementFormat.Half2:
                 return 4;
-
             case VertexElementFormat.Float2:
             case VertexElementFormat.UInt2:
             case VertexElementFormat.Int2:
@@ -136,19 +139,16 @@ public static class FormatSizeHelpers
             case VertexElementFormat.Short4:
             case VertexElementFormat.Half4:
                 return 8;
-
             case VertexElementFormat.Float3:
             case VertexElementFormat.UInt3:
             case VertexElementFormat.Int3:
                 return 12;
-
             case VertexElementFormat.Float4:
             case VertexElementFormat.UInt4:
             case VertexElementFormat.Int4:
                 return 16;
-
             default:
-                throw Illegal.Value<VertexElementFormat>();
+                return Illegal.Handle<VertexElementFormat, uint>();
         }
     }
 }

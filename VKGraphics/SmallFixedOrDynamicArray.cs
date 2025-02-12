@@ -1,45 +1,47 @@
-﻿using System.Buffers;
-using System.Runtime.CompilerServices;
+﻿using System;
+using System.Buffers;
 
 namespace VKGraphics;
 
 internal unsafe struct SmallFixedOrDynamicArray : IDisposable
 {
-    private const int max_fixed_values = 5;
+    public const int MaxFixedValues = 5;
+
+    private static ArrayPool<uint> _arrayPool = ArrayPool<uint>.Create();
 
     public readonly uint Count;
-    private fixed uint fixedData[max_fixed_values];
-    public readonly uint[] Data;
+    private fixed uint FixedData[MaxFixedValues];
+    public uint[]? Data;
 
     public uint Get(uint i)
     {
-        return Count > max_fixed_values ? Data[i] : fixedData[i];
+        return Count > MaxFixedValues ? Data![i] : FixedData[i];
     }
 
-    public SmallFixedOrDynamicArray(uint count, ref uint data)
+    public SmallFixedOrDynamicArray(ReadOnlySpan<uint> offsets)
     {
-        if (count > max_fixed_values)
+        if (offsets.Length > MaxFixedValues)
         {
-            Data = ArrayPool<uint>.Shared.Rent((int)count);
+            Data = _arrayPool.Rent(offsets.Length);
         }
         else
         {
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < offsets.Length; i++)
             {
-                fixedData[i] = Unsafe.Add(ref data, i);
+                FixedData[i] = offsets[i];
             }
-
             Data = null;
         }
 
-        Count = count;
+        Count = (uint)offsets.Length;
     }
 
     public void Dispose()
     {
         if (Data != null)
         {
-            ArrayPool<uint>.Shared.Return(Data);
+            _arrayPool.Return(Data);
+            Data = null;
         }
     }
 }

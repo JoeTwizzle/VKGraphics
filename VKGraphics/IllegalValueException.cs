@@ -1,14 +1,26 @@
-﻿namespace VKGraphics;
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace VKGraphics;
 
 internal static class Illegal
 {
-    internal static Exception Value<T>()
+    [DoesNotReturn]
+    internal static void Handle<T>()
     {
-        return new IllegalValueException<T>();
+        throw new IllegalValueException<T>();
     }
 
-    // ReSharper disable once UnusedTypeParameter
+    [DoesNotReturn]
+    internal static R Handle<T, R>()
+    {
+        throw new IllegalValueException<T, R>();
+    }
+
     internal class IllegalValueException<T> : VeldridException
+    {
+    }
+
+    internal class IllegalValueException<T, R> : IllegalValueException<T>
     {
     }
 }

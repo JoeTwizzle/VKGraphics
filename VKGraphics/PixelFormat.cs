@@ -1,14 +1,6 @@
 ﻿namespace VKGraphics;
 
-/// <summary>
-///     The format of data stored in a <see cref="Texture" />.
-///     Each name is a compound identifier, where each component denotes a name and a number of bits used to store that
-///     component. The final component identifies the storage type of each component. "Float" identifies a signed,
-///     floating-point
-///     type, UNorm identifies an unsigned integer type which is normalized, meaning it occupies the full space of the
-///     integer
-///     type. The SRgb suffix for normalized integer formats indicates that the RGB components are stored in sRGB format.
-/// </summary>
+
 public enum PixelFormat : byte
 {
     /// <summary>
@@ -324,10 +316,25 @@ public enum PixelFormat : byte
     ///     This is an sRGB format.
     /// </summary>
     Bc3UNormSRgb,
-
     /// <summary>
     ///     BC7 block compressed format.
     ///     This is an sRGB format.
     /// </summary>
-    Bc7UNormSRgb
+    Bc7UNormSRgb,
+
+    /// <summary>
+    /// A depth-stencil format where the depth is stored in a 16-bit unsigned normalized integer, and the stencil is stored
+    /// in an 8-bit unsigned integer.
+    /// </summary>
+    D16UNormS8UInt,
+
+    /// <summary>
+    /// A depth format where the depth is stored in a 16-bit unsigned normalized integer.
+    /// </summary>
+    D16UNorm,
+
+    /// <summary>
+    /// A depth format where the depth is stored in a 32-bit signed floating-point value.
+    /// </summary>
+    D32Float,
 }

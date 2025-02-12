@@ -5,7 +5,6 @@ using OpenTK.Platform;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using VKGraphics.Windowing;
 
 namespace BrickEngine.Example.VoxelRenderer.Standard
 {
@@ -86,7 +85,7 @@ namespace BrickEngine.Example.VoxelRenderer.Standard
         {
             Camera = new();
             this.window = game;
-            gd = GraphicsDevice.CreateVulkan(new GraphicsDeviceOptions(true, null, false, ResourceBindingModel.Improved, true, true));
+            gd = GraphicsDevice.CreateVulkan(new GraphicsDeviceOptions(true, null, false, ResourceBindingModel.Improved, true, false));
             ResourceFactory rf = gd.ResourceFactory;
             swapchain = rf.CreateSwapchain(new SwapchainDescription(window.Window, (uint)800, 600, null, false));
 
@@ -140,8 +139,8 @@ namespace BrickEngine.Example.VoxelRenderer.Standard
             CreateTextures(game, rf);
 
             var fsTriShaderSet = new ShaderSetDescription(null, [vertShader, fragShader]);
-            displayPipline = rf.CreateGraphicsPipeline(new GraphicsPipelineDescription(BlendStateDescription.SINGLE_OVERRIDE_BLEND,
-                DepthStencilStateDescription.DISABLED, RasterizerStateDescription.CULL_NONE,
+            displayPipline = rf.CreateGraphicsPipeline(new GraphicsPipelineDescription(BlendStateDescription.SingleOverrideBlend,
+                DepthStencilStateDescription.Disabled, RasterizerStateDescription.CullNone,
                   PrimitiveTopology.TriangleList, fsTriShaderSet, displayBufferLayout, swapchain.Framebuffer.OutputDescription));
 
             cl = rf.CreateCommandList();

@@ -1,20 +1,22 @@
-﻿namespace VKGraphics;
+﻿using System;
 
-internal struct MappedResourceCacheKey : IEquatable<MappedResourceCacheKey>
+namespace VKGraphics;
+
+internal readonly struct MappedResourceCacheKey : IEquatable<MappedResourceCacheKey>
 {
-    public readonly IMappableResource Resource;
+    public readonly MappableResource Resource;
     public readonly uint Subresource;
 
-    public MappedResourceCacheKey(IMappableResource resource, uint subresource)
+    public MappedResourceCacheKey(MappableResource resource, uint subresource)
     {
-        Resource = resource;
+        Resource = resource ?? throw new ArgumentNullException(nameof(resource));
         Subresource = subresource;
     }
 
     public bool Equals(MappedResourceCacheKey other)
     {
         return Resource.Equals(other.Resource)
-               && Subresource.Equals(other.Subresource);
+            && Subresource.Equals(other.Subresource);
     }
 
     public override int GetHashCode()

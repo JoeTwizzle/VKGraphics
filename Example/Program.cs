@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using OpenTK.Platform;
+using System.Diagnostics;
 
 namespace BrickEngine.Example
 {

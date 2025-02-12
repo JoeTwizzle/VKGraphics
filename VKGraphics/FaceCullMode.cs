@@ -1,22 +1,20 @@
 ﻿namespace VKGraphics;
 
 /// <summary>
-///     Indicates which face will be culled.
+/// Indicates which face will be culled.
 /// </summary>
 public enum FaceCullMode : byte
 {
     /// <summary>
-    ///     The back face.
+    /// The back face.
     /// </summary>
     Back,
-
     /// <summary>
-    ///     The front face.
+    /// The front face.
     /// </summary>
     Front,
-
     /// <summary>
-    ///     No face culling.
+    /// No face culling.
     /// </summary>
-    None
+    None,
 }

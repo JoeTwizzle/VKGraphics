@@ -1,104 +1,105 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System;
+using System.Runtime.CompilerServices;
 
 namespace VKGraphics;
 
 /// <summary>
-///     A color stored in four 8-bit unsigned normalized integer values, in RGBA component order.
+/// A color stored in four 8-bit unsigned normalized integer values, in RGBA component order.
 /// </summary>
-public struct RgbaByte : IEquatable<RgbaByte>
+public readonly struct RgbaByte : IEquatable<RgbaByte>
 {
     /// <summary>
-    ///     The red component.
+    /// The red component.
     /// </summary>
     public readonly byte R;
 
     /// <summary>
-    ///     The green component.
+    /// The green component.
     /// </summary>
     public readonly byte G;
 
     /// <summary>
-    ///     The blue component.
+    /// The blue component.
     /// </summary>
     public readonly byte B;
 
     /// <summary>
-    ///     The alpha component.
+    /// The alpha component.
     /// </summary>
     public readonly byte A;
 
     /// <summary>
-    ///     Red (255, 0, 0, 255)
+    /// Red (255, 0, 0, 255)
     /// </summary>
-    public static readonly RgbaByte RED = new RgbaByte(255, 0, 0, 255);
+    public static readonly RgbaByte Red = new(255, 0, 0, 255);
 
     /// <summary>
-    ///     Dark Red (153, 0, 0, 255)
+    /// Dark Red (153, 0, 0, 255)
     /// </summary>
-    public static readonly RgbaByte DARK_RED = new RgbaByte(153, 0, 0, 255);
+    public static readonly RgbaByte DarkRed = new(153, 0, 0, 255);
 
     /// <summary>
-    ///     Green (0, 255, 0, 255)
+    /// Green (0, 255, 0, 255)
     /// </summary>
-    public static readonly RgbaByte GREEN = new RgbaByte(0, 255, 0, 255);
+    public static readonly RgbaByte Green = new(0, 255, 0, 255);
 
     /// <summary>
-    ///     Blue (0, 0, 255, 255)
+    /// Blue (0, 0, 255, 255)
     /// </summary>
-    public static readonly RgbaByte BLUE = new RgbaByte(0, 0, 255, 255);
+    public static readonly RgbaByte Blue = new(0, 0, 255, 255);
 
     /// <summary>
-    ///     Yellow (255, 255, 0, 255)
+    /// Yellow (255, 255, 0, 255)
     /// </summary>
-    public static readonly RgbaByte YELLOW = new RgbaByte(255, 255, 0, 255);
+    public static readonly RgbaByte Yellow = new(255, 255, 0, 255);
 
     /// <summary>
-    ///     Grey (64, 64, 64, 255)
+    /// Grey (64, 64, 64, 255)
     /// </summary>
-    public static readonly RgbaByte GREY = new RgbaByte(64, 64, 64, 255);
+    public static readonly RgbaByte Grey = new(64, 64, 64, 255);
 
     /// <summary>
-    ///     Light Grey (166, 166, 166, 255)
+    /// Light Grey (166, 166, 166, 255)
     /// </summary>
-    public static readonly RgbaByte LIGHT_GREY = new RgbaByte(166, 166, 166, 255);
+    public static readonly RgbaByte LightGrey = new(166, 166, 166, 255);
 
     /// <summary>
-    ///     Cyan (0, 255, 255, 255)
+    /// Cyan (0, 255, 255, 255)
     /// </summary>
-    public static readonly RgbaByte CYAN = new RgbaByte(0, 255, 255, 255);
+    public static readonly RgbaByte Cyan = new(0, 255, 255, 255);
 
     /// <summary>
-    ///     White (255, 255, 255, 255)
+    /// White (255, 255, 255, 255)
     /// </summary>
-    public static readonly RgbaByte WHITE = new RgbaByte(255, 255, 255, 255);
+    public static readonly RgbaByte White = new(255, 255, 255, 255);
 
     /// <summary>
-    ///     Cornflower Blue (100, 149, 237, 255)
+    /// Cornflower Blue (100, 149, 237, 255)
     /// </summary>
-    public static readonly RgbaByte CORNFLOWER_BLUE = new RgbaByte(100, 149, 237, 255);
+    public static readonly RgbaByte CornflowerBlue = new(100, 149, 237, 255);
 
     /// <summary>
-    ///     Clear (0, 0, 0, 0)
+    /// Clear (0, 0, 0, 0)
     /// </summary>
-    public static readonly RgbaByte CLEAR = new RgbaByte(0, 0, 0, 0);
+    public static readonly RgbaByte Clear = new(0, 0, 0, 0);
 
     /// <summary>
-    ///     Black (0, 0, 0, 255)
+    /// Black (0, 0, 0, 255)
     /// </summary>
-    public static readonly RgbaByte BLACK = new RgbaByte(0, 0, 0, 255);
+    public static readonly RgbaByte Black = new(0, 0, 0, 255);
 
     /// <summary>
-    ///     Pink (255, 155, 191, 255)
+    /// Pink (255, 155, 191, 255)
     /// </summary>
-    public static readonly RgbaByte PINK = new RgbaByte(255, 155, 191, 255);
+    public static readonly RgbaByte Pink = new(255, 155, 191, 255);
 
     /// <summary>
-    ///     Orange (255, 92, 0, 255)
+    /// Orange (255, 92, 0, 255)
     /// </summary>
-    public static readonly RgbaByte ORANGE = new RgbaByte(255, 92, 0, 255);
+    public static readonly RgbaByte Orange = new(255, 92, 0, 255);
 
     /// <summary>
-    ///     Constructs a new RgbaByte from the given components.
+    /// Constructs a new RgbaByte from the given components.
     /// </summary>
     /// <param name="r">The red component.</param>
     /// <param name="g">The green component.</param>
@@ -113,7 +114,7 @@ public struct RgbaByte : IEquatable<RgbaByte>
     }
 
     /// <summary>
-    ///     Element-wise equality.
+    /// Element-wise equality.
     /// </summary>
     /// <param name="other">The instance to compare to.</param>
     /// <returns>True if all elements are equal; false otherswise.</returns>
@@ -124,17 +125,17 @@ public struct RgbaByte : IEquatable<RgbaByte>
     }
 
     /// <summary>
-    ///     Determines whether the specified object is equal to the current object.
+    /// Determines whether the specified object is equal to the current object.
     /// </summary>
     /// <param name="obj">The object to compare with the current object.</param>
     /// <returns>true if the specified object is equal to the current object; otherwise, false.</returns>
-    public override bool Equals(object obj)
+    public override bool Equals(object? obj)
     {
         return obj is RgbaByte other && Equals(other);
     }
 
     /// <summary>
-    ///     Returns the hash code for this instance.
+    /// Returns the hash code for this instance.
     /// </summary>
     /// <returns>A 32-bit signed integer that is the hash code for this instance.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -144,16 +145,16 @@ public struct RgbaByte : IEquatable<RgbaByte>
     }
 
     /// <summary>
-    ///     Returns a string representation of this color.
+    /// Returns a string representation of this color.
     /// </summary>
     /// <returns></returns>
     public override string ToString()
     {
-        return $"R:{R}, G:{G}, B:{B}, A:{A}";
+        return string.Format("R:{0}, G:{1}, B:{2}, A:{3}", R, G, B, A);
     }
 
     /// <summary>
-    ///     Element-wise equality.
+    /// Element-wise equality.
     /// </summary>
     /// <param name="left">The first value.</param>
     /// <param name="right">The second value.</param>
@@ -164,7 +165,7 @@ public struct RgbaByte : IEquatable<RgbaByte>
     }
 
     /// <summary>
-    ///     Element-wise inequality.
+    /// Element-wise inequality.
     /// </summary>
     /// <param name="left">The first value.</param>
     /// <param name="right">The second value.</param>

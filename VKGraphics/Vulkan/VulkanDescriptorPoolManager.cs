@@ -1,32 +1,36 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Generic;
+using System.Diagnostics;
+using OpenTK.Graphics.Vulkan;
+using static OpenTK.Graphics.Vulkan.Vk;
+
 namespace VKGraphics.Vulkan;
 
-internal class VkDescriptorPoolManager
+internal sealed class VulkanDescriptorPoolManager
 {
-    private readonly VkGraphicsDevice gd;
-    private readonly List<PoolInfo> pools = new List<PoolInfo>();
-    private readonly object lockObj = new object();
+    private readonly VulkanGraphicsDevice _gd;
+    private readonly List<PoolInfo> _pools = new();
+    private readonly object _lock = new();
 
-    public VkDescriptorPoolManager(VkGraphicsDevice gd)
+    public VulkanDescriptorPoolManager(VulkanGraphicsDevice gd)
     {
-        this.gd = gd;
-        pools.Add(createNewPool());
+        _gd = gd;
+        _pools.Add(CreateNewPool());
     }
 
     public unsafe DescriptorAllocationToken Allocate(DescriptorResourceCounts counts, VkDescriptorSetLayout setLayout)
     {
-        lock (lockObj)
+        lock (_lock)
         {
-            var pool = getPool(counts);
-            var dsAi = new VkDescriptorSetAllocateInfo
+            VkDescriptorPool pool = GetPool(counts);
+            VkDescriptorSetAllocateInfo dsAI = new()
             {
                 descriptorSetCount = 1,
                 pSetLayouts = &setLayout,
                 descriptorPool = pool
             };
+
             VkDescriptorSet set;
-            var result = Vk.AllocateDescriptorSets(gd.Device, &dsAi, &set);
-            VulkanUtil.CheckResult(result);
+            VulkanUtil.CheckResult(AllocateDescriptorSets(_gd.Device, &dsAI, &set));
 
             return new DescriptorAllocationToken(set, pool);
         }
@@ -34,80 +38,79 @@ internal class VkDescriptorPoolManager
 
     public void Free(DescriptorAllocationToken token, DescriptorResourceCounts counts)
     {
-        lock (lockObj)
+        lock (_lock)
         {
-            foreach (var poolInfo in pools)
+            foreach (PoolInfo poolInfo in _pools)
             {
                 if (poolInfo.Pool == token.Pool)
                 {
-                    poolInfo.Free(gd.Device, token, counts);
+                    poolInfo.Free(_gd.Device, token, counts);
                 }
             }
         }
+    }
+
+    private VkDescriptorPool GetPool(DescriptorResourceCounts counts)
+    {
+        foreach (PoolInfo poolInfo in _pools)
+        {
+            if (poolInfo.Allocate(counts))
+            {
+                return poolInfo.Pool;
+            }
+        }
+
+        PoolInfo newPool = CreateNewPool();
+        _pools.Add(newPool);
+        bool result = newPool.Allocate(counts);
+        Debug.Assert(result);
+        return newPool.Pool;
+    }
+
+    private unsafe PoolInfo CreateNewPool()
+    {
+        uint totalSets = 1000;
+        uint descriptorCount = 100;
+        uint poolSizeCount = 7;
+        VkDescriptorPoolSize* sizes = stackalloc VkDescriptorPoolSize[(int)poolSizeCount];
+        sizes[0].type = VkDescriptorType.DescriptorTypeUniformBuffer;
+        sizes[0].descriptorCount = descriptorCount;
+        sizes[1].type = VkDescriptorType.DescriptorTypeSampledImage;
+        sizes[1].descriptorCount = descriptorCount;
+        sizes[2].type = VkDescriptorType.DescriptorTypeSampler;
+        sizes[2].descriptorCount = descriptorCount;
+        sizes[3].type = VkDescriptorType.DescriptorTypeStorageBuffer;
+        sizes[3].descriptorCount = descriptorCount;
+        sizes[4].type = VkDescriptorType.DescriptorTypeStorageImage;
+        sizes[4].descriptorCount = descriptorCount;
+        sizes[5].type = VkDescriptorType.DescriptorTypeUniformBufferDynamic;
+        sizes[5].descriptorCount = descriptorCount;
+        sizes[6].type = VkDescriptorType.DescriptorTypeStorageBufferDynamic;
+        sizes[6].descriptorCount = descriptorCount;
+
+        VkDescriptorPoolCreateInfo poolCI = new()
+        {
+            flags = VkDescriptorPoolCreateFlagBits.DescriptorPoolCreateFreeDescriptorSetBit,
+            maxSets = totalSets,
+            pPoolSizes = sizes,
+            poolSizeCount = poolSizeCount
+        };
+
+        VkDescriptorPool descriptorPool;
+        VulkanUtil.CheckResult(CreateDescriptorPool(_gd.Device, &poolCI, null, &descriptorPool));
+
+        return new PoolInfo(descriptorPool, totalSets, descriptorCount);
     }
 
     internal unsafe void DestroyAll()
     {
-        foreach (var poolInfo in pools)
+        foreach (PoolInfo poolInfo in _pools)
         {
-            Vk.DestroyDescriptorPool(gd.Device, poolInfo.Pool, null);
+            DestroyDescriptorPool(_gd.Device, poolInfo.Pool, null);
         }
     }
 
-    private VkDescriptorPool getPool(DescriptorResourceCounts counts)
-    {
-        lock (lockObj)
-        {
-            foreach (var poolInfo in pools)
-            {
-                if (poolInfo.Allocate(counts))
-                {
-                    return poolInfo.Pool;
-                }
-            }
-
-            var newPool = createNewPool();
-            pools.Add(newPool);
-            bool result = newPool.Allocate(counts);
-            Debug.Assert(result);
-            return newPool.Pool;
-        }
-    }
-
-    private unsafe PoolInfo createNewPool()
-    {
-        const uint total_sets = 1000;
-        const uint descriptor_count = 100;
-        const uint pool_size_count = 7;
-        var sizes = stackalloc VkDescriptorPoolSize[(int)pool_size_count];
-        sizes[0].type = VkDescriptorType.DescriptorTypeUniformBuffer;
-        sizes[0].descriptorCount = descriptor_count;
-        sizes[1].type = VkDescriptorType.DescriptorTypeSampledImage;
-        sizes[1].descriptorCount = descriptor_count;
-        sizes[2].type = VkDescriptorType.DescriptorTypeSampler;
-        sizes[2].descriptorCount = descriptor_count;
-        sizes[3].type = VkDescriptorType.DescriptorTypeStorageBuffer;
-        sizes[3].descriptorCount = descriptor_count;
-        sizes[4].type = VkDescriptorType.DescriptorTypeStorageImage;
-        sizes[4].descriptorCount = descriptor_count;
-        sizes[5].type = VkDescriptorType.DescriptorTypeUniformBufferDynamic;
-        sizes[5].descriptorCount = descriptor_count;
-        sizes[6].type = VkDescriptorType.DescriptorTypeStorageBufferDynamic;
-        sizes[6].descriptorCount = descriptor_count;
-
-        var poolCi = new VkDescriptorPoolCreateInfo();
-        poolCi.flags = VkDescriptorPoolCreateFlagBits.DescriptorPoolCreateFreeDescriptorSetBit;
-        poolCi.maxSets = total_sets;
-        poolCi.pPoolSizes = sizes;
-        poolCi.poolSizeCount = pool_size_count;
-        VkDescriptorPool descriptorPool;
-        var result = Vk.CreateDescriptorPool(gd.Device, &poolCi, null, &descriptorPool);
-        VulkanUtil.CheckResult(result);
-
-        return new PoolInfo(descriptorPool, total_sets, descriptor_count);
-    }
-
-    private unsafe class PoolInfo
+    private sealed class PoolInfo
     {
         public readonly VkDescriptorPool Pool;
 
@@ -155,21 +158,25 @@ internal class VkDescriptorPoolManager
                 StorageImageCount -= counts.StorageImageCount;
                 return true;
             }
-
-            return false;
+            else
+            {
+                return false;
+            }
         }
 
-        internal void Free(VkDevice device, DescriptorAllocationToken token, DescriptorResourceCounts counts)
+        internal unsafe void Free(VkDevice device, DescriptorAllocationToken token, DescriptorResourceCounts counts)
         {
-            var set = token.Set;
-            Vk.FreeDescriptorSets(device, Pool, 1, &set);
+            VkDescriptorSet set = token.Set;
+            FreeDescriptorSets(device, Pool, 1, &set);
 
             RemainingSets += 1;
 
             UniformBufferCount += counts.UniformBufferCount;
+            UniformBufferDynamicCount += counts.UniformBufferDynamicCount;
             SampledImageCount += counts.SampledImageCount;
             SamplerCount += counts.SamplerCount;
             StorageBufferCount += counts.StorageBufferCount;
+            StorageBufferDynamicCount += counts.StorageBufferDynamicCount;
             StorageImageCount += counts.StorageImageCount;
         }
     }

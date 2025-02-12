@@ -1,68 +1,61 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 
 namespace VKGraphics;
 
 /// <summary>
-///     A device resource used to control which color and depth textures are rendered to.
-///     See <see cref="FramebufferDescription" />.
+/// A device resource used to control which color and depth textures are rendered to.
+/// See <see cref="FramebufferDescription"/>.
 /// </summary>
-public abstract class Framebuffer : IDeviceResource, IDisposable
+public abstract class Framebuffer : DeviceResource, IDisposable
 {
-    /// <summary>
-    ///     Gets the depth attachment associated with this instance. May be null if no depth texture is used.
-    /// </summary>
-    public virtual FramebufferAttachment? DepthTarget { get; }
+    protected FramebufferAttachment? _depthTarget;
+    protected FramebufferAttachment[] _colorTargets = Array.Empty<FramebufferAttachment>();
 
     /// <summary>
-    ///     Gets the collection of color attachments associated with this instance. May be empty.
+    /// Gets the depth attachment associated with this instance. May be null if no depth texture is used.
     /// </summary>
-    public virtual IReadOnlyList<FramebufferAttachment> ColorTargets { get; }
+    public FramebufferAttachment? DepthTarget => _depthTarget;
 
     /// <summary>
-    ///     Gets an <see cref="VKGraphics.OutputDescription" /> which describes the number and formats of the depth and color
-    ///     targets
-    ///     in this instance.
+    /// Gets the collection of color attachments associated with this instance. May be empty.
     /// </summary>
-    public virtual OutputDescription OutputDescription { get; }
+    public ReadOnlySpan<FramebufferAttachment> ColorTargets => _colorTargets;
 
     /// <summary>
-    ///     Gets the width of the <see cref="Framebuffer" />.
+    /// Gets an <see cref="VKGraphics.OutputDescription"/> which describes the number and formats of the depth and color targets
+    /// in this instance.
     /// </summary>
-    public virtual uint Width { get; }
+    public OutputDescription OutputDescription { get; protected set; }
 
     /// <summary>
-    ///     Gets the height of the <see cref="Framebuffer" />.
+    /// Gets the width of the <see cref="Framebuffer"/>.
     /// </summary>
-    public virtual uint Height { get; }
+    public uint Width { get; protected set; }
 
     /// <summary>
-    ///     A bool indicating whether this instance has been disposed.
+    /// Gets the height of the <see cref="Framebuffer"/>.
     /// </summary>
-    public abstract bool IsDisposed { get; }
+    public uint Height { get; protected set; }
 
-    /// <summary>
-    ///     A string identifying this instance. Can be used to differentiate between objects in graphics debuggers and other
-    ///     tools.
-    /// </summary>
-    public abstract string Name { get; set; }
-
-    internal Framebuffer() { }
+    internal Framebuffer()
+    {
+    }
 
     internal Framebuffer(
         FramebufferAttachmentDescription? depthTargetDesc,
-        IReadOnlyList<FramebufferAttachmentDescription> colorTargetDescs)
+        ReadOnlySpan<FramebufferAttachmentDescription> colorTargetDescs)
     {
         if (depthTargetDesc != null)
         {
-            var depthAttachment = depthTargetDesc.Value;
-            DepthTarget = new FramebufferAttachment(
+            FramebufferAttachmentDescription depthAttachment = depthTargetDesc.Value;
+            _depthTarget = new FramebufferAttachment(
                 depthAttachment.Target,
                 depthAttachment.ArrayLayer,
                 depthAttachment.MipLevel);
         }
 
-        var colorTargets = new FramebufferAttachment[colorTargetDescs.Count];
-
+        FramebufferAttachment[] colorTargets = new FramebufferAttachment[colorTargetDescs.Length];
         for (int i = 0; i < colorTargets.Length; i++)
         {
             colorTargets[i] = new FramebufferAttachment(
@@ -71,36 +64,38 @@ public abstract class Framebuffer : IDeviceResource, IDisposable
                 colorTargetDescs[i].MipLevel);
         }
 
-        ColorTargets = colorTargets;
-
         Texture dimTex;
         uint mipLevel;
-
-        if (ColorTargets.Count > 0)
+        if (colorTargets.Length > 0)
         {
-            dimTex = ColorTargets[0].Target;
-            mipLevel = ColorTargets[0].MipLevel;
+            dimTex = colorTargets[0].Target;
+            mipLevel = colorTargets[0].MipLevel;
         }
         else
         {
-            Debug.Assert(DepthTarget != null);
-            dimTex = DepthTarget.Value.Target;
-            mipLevel = DepthTarget.Value.MipLevel;
+            Debug.Assert(_depthTarget != null);
+            dimTex = _depthTarget.Value.Target;
+            mipLevel = _depthTarget.Value.MipLevel;
         }
 
-        Util.GetMipDimensions(dimTex, mipLevel, out uint mipWidth, out uint mipHeight, out _);
+        Util.GetMipDimensions(dimTex, mipLevel, out uint mipWidth, out uint mipHeight);
         Width = mipWidth;
         Height = mipHeight;
 
+        _colorTargets = colorTargets;
         OutputDescription = OutputDescription.CreateFromFramebuffer(this);
     }
 
-    #region Disposal
+    /// <inheritdoc/>
+    public abstract string? Name { get; set; }
 
     /// <summary>
-    ///     Frees unmanaged device resources controlled by this instance.
+    /// A bool indicating whether this instance has been disposed.
+    /// </summary>
+    public abstract bool IsDisposed { get; }
+
+    /// <summary>
+    /// Frees unmanaged device resources controlled by this instance.
     /// </summary>
     public abstract void Dispose();
-
-    #endregion
 }

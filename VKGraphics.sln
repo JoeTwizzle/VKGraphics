@@ -7,8 +7,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VKGraphics", "VKGraphics\VK
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Example", "Example\Example.csproj", "{055A6A70-AC79-4BB0-92D7-A1A439E1BABA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VKGraphics.Windowing", "VKGraphics.Windowing\VKGraphics.Windowing.csproj", "{2D2BB8F7-A50D-4C6C-8E4D-415AA4E06016}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -23,10 +21,6 @@ Global
 		{055A6A70-AC79-4BB0-92D7-A1A439E1BABA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{055A6A70-AC79-4BB0-92D7-A1A439E1BABA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{055A6A70-AC79-4BB0-92D7-A1A439E1BABA}.Release|Any CPU.Build.0 = Release|Any CPU
-		{2D2BB8F7-A50D-4C6C-8E4D-415AA4E06016}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{2D2BB8F7-A50D-4C6C-8E4D-415AA4E06016}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{2D2BB8F7-A50D-4C6C-8E4D-415AA4E06016}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{2D2BB8F7-A50D-4C6C-8E4D-415AA4E06016}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

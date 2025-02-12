@@ -1,25 +1,186 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Buffers;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
-[assembly: InternalsVisibleTo("VKGraphics.Windowing")]
 namespace VKGraphics;
+
 internal static class Util
 {
+    public static Encoding UTF8 { get; } = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
+    [DebuggerNonUserCode]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static TDerived AssertSubtype<TBase, TDerived>(TBase? value) where TDerived : class, TBase where TBase : class
+    {
+#if DEBUG
+        if (value is not TDerived derived)
+        {
+            throw new VeldridException($"object {value} must be derived type {typeof(TDerived).FullName} to be used in this context.");
+        }
+
+        return derived;
+
+#else
+        return (TDerived)value;
+#endif
+    }
+
+    [DebuggerNonUserCode]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [return: NotNullIfNotNull(nameof(value))]
+    internal static TDerived? AssertSubtypeOrNull<TBase, TDerived>(TBase? value)
+        where TBase : class
+        where TDerived : class, TBase
+    {
+#if DEBUG
+        if (value is not null and not TDerived)
+        {
+            throw new VeldridException($"object {value} must be null or derived type {typeof(TDerived).FullName} to be used in this context.");
+        }
+#endif
+        return (TDerived?)value;
+    }
+
+    internal static void EnsureArrayMinimumSize<T>(ref T[] array, uint size)
+    {
+        if (array == null || array.Length < size)
+        {
+            Array.Resize(ref array, (int)size);
+        }
+    }
+
+    internal static unsafe string GetString(byte* stringStart)
+    {
+        return Marshal.PtrToStringUTF8((IntPtr)stringStart) ?? "";
+    }
+
+    internal static unsafe string GetString(ReadOnlySpan<byte> span)
+    {
+        int length = span.IndexOf((byte)'\0');
+        if (length == -1)
+        {
+            length = span.Length;
+        }
+        return Encoding.UTF8.GetString(span.Slice(0, length));
+    }
+
+    internal static bool NullableEquals<T>(T? left, T? right) where T : struct, IEquatable<T>
+    {
+        if (left.HasValue && right.HasValue)
+        {
+            return left.Value.Equals(right.Value);
+        }
+
+        return left.HasValue == right.HasValue;
+    }
+
+    internal static bool ArrayEquals<T>(T[]? left, T[]? right) where T : class
+    {
+        return left.AsSpan().SequenceEqual(right.AsSpan());
+    }
+
+    internal static bool ArrayEqualsEquatable<T>(T[]? left, T[]? right) where T : struct, IEquatable<T>
+    {
+        return left.AsSpan().SequenceEqual(right.AsSpan());
+    }
+
+    internal static void ClearArray<T>(T[] array)
+    {
+        if (array != null)
+        {
+            Array.Clear(array, 0, array.Length);
+        }
+    }
+
     public static uint Clamp(uint value, uint min, uint max)
     {
         if (value <= min)
         {
             return min;
         }
-
-        if (value >= max)
+        else if (value >= max)
         {
             return max;
         }
+        else
+        {
+            return value;
+        }
+    }
 
-        return value;
+    internal static void GetMipLevelAndArrayLayer(Texture tex, uint subresource, out uint mipLevel, out uint arrayLayer)
+    {
+        arrayLayer = subresource / tex.MipLevels;
+        mipLevel = subresource - (arrayLayer * tex.MipLevels);
+    }
+
+    internal static void GetMipDimensions(Texture tex, uint mipLevel, out uint width, out uint height, out uint depth)
+    {
+        width = GetDimension(tex.Width, mipLevel);
+        height = GetDimension(tex.Height, mipLevel);
+        depth = GetDimension(tex.Depth, mipLevel);
+    }
+
+    internal static void GetMipDimensions(Texture tex, uint mipLevel, out uint width, out uint height)
+    {
+        width = GetDimension(tex.Width, mipLevel);
+        height = GetDimension(tex.Height, mipLevel);
+    }
+
+    internal static uint GetDimension(uint largestLevelDimension, uint mipLevel)
+    {
+        uint ret = largestLevelDimension;
+        for (uint i = 0; i < mipLevel; i++)
+        {
+            ret /= 2;
+        }
+
+        return Math.Max(1, ret);
+    }
+
+    internal static ulong ComputeSubresourceOffset(Texture tex, uint mipLevel, uint arrayLayer)
+    {
+        Debug.Assert((tex.Usage & TextureUsage.Staging) == TextureUsage.Staging);
+        return ComputeArrayLayerOffset(tex, arrayLayer) + ComputeMipOffset(tex, mipLevel);
+    }
+
+    internal static uint ComputeMipOffset(Texture tex, uint mipLevel)
+    {
+        uint blockSize = FormatHelpers.IsCompressedFormat(tex.Format) ? 4u : 1u;
+        uint offset = 0;
+        for (uint level = 0; level < mipLevel; level++)
+        {
+            GetMipDimensions(tex, level, out uint mipWidth, out uint mipHeight, out uint mipDepth);
+            uint storageWidth = Math.Max(mipWidth, blockSize);
+            uint storageHeight = Math.Max(mipHeight, blockSize);
+            offset += FormatHelpers.GetRegionSize(storageWidth, storageHeight, mipDepth, tex.Format);
+        }
+
+        return offset;
+    }
+
+    internal static uint ComputeArrayLayerOffset(Texture tex, uint arrayLayer)
+    {
+        if (arrayLayer == 0)
+        {
+            return 0;
+        }
+
+        uint blockSize = FormatHelpers.IsCompressedFormat(tex.Format) ? 4u : 1u;
+        uint layerPitch = 0;
+        for (uint level = 0; level < tex.MipLevels; level++)
+        {
+            GetMipDimensions(tex, level, out uint mipWidth, out uint mipHeight, out uint mipDepth);
+            uint storageWidth = Math.Max(mipWidth, blockSize);
+            uint storageHeight = Math.Max(mipHeight, blockSize);
+            layerPitch += FormatHelpers.GetRegionSize(storageWidth, storageHeight, mipDepth, tex.Format);
+        }
+
+        return layerPitch * arrayLayer;
     }
 
     public static unsafe void CopyTextureRegion(
@@ -57,47 +218,64 @@ internal static class Util
         else
         {
             for (uint zz = 0; zz < depth; zz++)
-            {
                 for (uint yy = 0; yy < numRows; yy++)
                 {
                     byte* rowCopyDst = (byte*)dst
-                                       + dstDepthPitch * (zz + dstZ)
-                                       + dstRowPitch * (yy + compressedDstY)
-                                       + blockSizeInBytes * compressedDstX;
+                        + dstDepthPitch * (zz + dstZ)
+                        + dstRowPitch * (yy + compressedDstY)
+                        + blockSizeInBytes * compressedDstX;
 
                     byte* rowCopySrc = (byte*)src
-                                       + srcDepthPitch * (zz + srcZ)
-                                       + srcRowPitch * (yy + compressedSrcY)
-                                       + blockSizeInBytes * compressedSrcX;
+                        + srcDepthPitch * (zz + srcZ)
+                        + srcRowPitch * (yy + compressedSrcY)
+                        + blockSizeInBytes * compressedSrcX;
 
                     Unsafe.CopyBlock(rowCopyDst, rowCopySrc, rowSize);
                 }
-            }
         }
     }
 
-    public static DeviceBufferRange GetBufferRange(IBindableResource resource, uint additionalOffset)
+    internal static T[] ShallowClone<T>(T[]? array)
     {
-        if (resource is DeviceBufferRange range)
+        if (array == null)
         {
+            return Array.Empty<T>();
+        }
+        return (T[])array.Clone();
+    }
+
+    public static DeviceBufferRange GetBufferRange(BindableResource resource, uint additionalOffset)
+    {
+        if (resource.Kind == BindableResourceKind.DeviceBufferRange)
+        {
+            DeviceBufferRange range = resource.GetDeviceBufferRange();
             return new DeviceBufferRange(range.Buffer, range.Offset + additionalOffset, range.SizeInBytes);
         }
-
-        var buffer = (DeviceBuffer)resource;
-        return new DeviceBufferRange(buffer, additionalOffset, buffer.SizeInBytes);
+        else if (resource.Kind == BindableResourceKind.DeviceBuffer)
+        {
+            DeviceBuffer buffer = resource.GetDeviceBuffer();
+            return new DeviceBufferRange(buffer, additionalOffset, buffer.SizeInBytes);
+        }
+        else
+        {
+            static DeviceBufferRange Throw(BindableResourceKind resourceKind)
+            {
+                throw new VeldridException($"Unexpected resource type used in a buffer type slot: {resourceKind}");
+            }
+            return Throw(resource.Kind);
+        }
     }
 
-    public static bool GetDeviceBuffer(IBindableResource resource, out DeviceBuffer? buffer)
+    public static bool GetDeviceBuffer(BindableResource resource, [MaybeNullWhen(false)] out DeviceBuffer buffer)
     {
-        if (resource is DeviceBuffer db)
+        if (resource.Kind == BindableResourceKind.DeviceBuffer)
         {
-            buffer = db;
+            buffer = resource.GetDeviceBuffer();
             return true;
         }
-
-        if (resource is DeviceBufferRange range)
+        else if (resource.Kind == BindableResourceKind.DeviceBufferRange)
         {
-            buffer = range.Buffer;
+            buffer = resource.GetDeviceBufferRange().Buffer;
             return true;
         }
 
@@ -105,200 +283,24 @@ internal static class Util
         return false;
     }
 
-    [DebuggerNonUserCode]
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static TDerived AssertSubtype<TBase, TDerived>(TBase value) where TDerived : class, TBase where TBase : class
+    internal static TextureView GetTextureView(GraphicsDevice gd, BindableResource resource)
     {
-#if DEBUG
-        if (value == null)
+        if (resource.Kind == BindableResourceKind.TextureView)
         {
-            throw new VeldridException($"Expected object of type {typeof(TDerived).FullName} but received null instead.");
+            return resource.GetTextureView();
         }
-
-        if (!(value is TDerived derived))
+        else if (resource.Kind == BindableResourceKind.Texture)
         {
-            throw new VeldridException($"object {value} must be derived type {typeof(TDerived).FullName} to be used in this context.");
+            return resource.GetTexture().GetFullTextureView(gd);
         }
-
-        return derived;
-
-#else
-        return (TDerived)value;
-#endif
-    }
-
-    internal static void EnsureArrayMinimumSize<T>(ref T[] array, uint size)
-    {
-        if (array == null)
+        else
         {
-            array = new T[size];
-        }
-        else if (array.Length < size)
-        {
-            Array.Resize(ref array, (int)size);
-        }
-    }
-
-    internal static uint USizeOf<T>() where T : struct
-    {
-        return (uint)Unsafe.SizeOf<T>();
-    }
-
-    internal static unsafe string GetString(byte* stringStart)
-    {
-        return Encoding.UTF8.GetString(MemoryMarshal.CreateReadOnlySpanFromNullTerminated(stringStart));
-    }
-
-    internal static bool NullableEquals<T>(T? left, T? right) where T : struct, IEquatable<T>
-    {
-        if (left.HasValue && right.HasValue)
-        {
-            return left.Value.Equals(right.Value);
-        }
-
-        return left.HasValue == right.HasValue;
-    }
-
-    internal static bool ArrayEquals<T>(T[] left, T[] right) where T : class
-    {
-        if (left == null || right == null)
-        {
-            return left == right;
-        }
-
-        if (left.Length != right.Length)
-        {
-            return false;
-        }
-
-        for (int i = 0; i < left.Length; i++)
-        {
-            if (!ReferenceEquals(left[i], right[i]))
+            static TextureView Throw(BindableResourceKind resourceKind)
             {
-                return false;
+                throw new VeldridException($"Unexpected resource type used in a texture type slot: {resourceKind}.");
             }
+            return Throw(resource.Kind);
         }
-
-        return true;
-    }
-
-    internal static bool ArrayEqualsEquatable<T>(T[] left, T[] right) where T : struct, IEquatable<T>
-    {
-        if (left == null || right == null)
-        {
-            return left == right;
-        }
-
-        if (left.Length != right.Length)
-        {
-            return false;
-        }
-
-        for (int i = 0; i < left.Length; i++)
-        {
-            if (!left[i].Equals(right[i]))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    internal static void ClearArray<T>(T[] array)
-    {
-        if (array != null)
-        {
-            Array.Clear(array, 0, array.Length);
-        }
-    }
-
-    internal static void GetMipLevelAndArrayLayer(Texture tex, uint subresource, out uint mipLevel, out uint arrayLayer)
-    {
-        arrayLayer = subresource / tex.MipLevels;
-        mipLevel = subresource - arrayLayer * tex.MipLevels;
-    }
-
-    internal static void GetMipDimensions(Texture tex, uint mipLevel, out uint width, out uint height, out uint depth)
-    {
-        width = GetDimension(tex.Width, mipLevel);
-        height = GetDimension(tex.Height, mipLevel);
-        depth = GetDimension(tex.Depth, mipLevel);
-    }
-
-    internal static uint GetDimension(uint largestLevelDimension, uint mipLevel)
-    {
-        uint ret = largestLevelDimension;
-        for (uint i = 0; i < mipLevel; i++)
-        {
-            ret /= 2;
-        }
-
-        return Math.Max(1, ret);
-    }
-
-    internal static ulong ComputeSubresourceOffset(Texture tex, uint mipLevel, uint arrayLayer)
-    {
-        Debug.Assert((tex.Usage & TextureUsage.Staging) == TextureUsage.Staging);
-        return ComputeArrayLayerOffset(tex, arrayLayer) + ComputeMipOffset(tex, mipLevel);
-    }
-
-    internal static uint ComputeMipOffset(Texture tex, uint mipLevel)
-    {
-        uint blockSize = FormatHelpers.IsCompressedFormat(tex.Format) ? 4u : 1u;
-        uint offset = 0;
-
-        for (uint level = 0; level < mipLevel; level++)
-        {
-            GetMipDimensions(tex, level, out uint mipWidth, out uint mipHeight, out uint mipDepth);
-            uint storageWidth = Math.Max(mipWidth, blockSize);
-            uint storageHeight = Math.Max(mipHeight, blockSize);
-            offset += FormatHelpers.GetRegionSize(storageWidth, storageHeight, mipDepth, tex.Format);
-        }
-
-        return offset;
-    }
-
-    internal static uint ComputeArrayLayerOffset(Texture tex, uint arrayLayer)
-    {
-        if (arrayLayer == 0)
-        {
-            return 0;
-        }
-
-        uint blockSize = FormatHelpers.IsCompressedFormat(tex.Format) ? 4u : 1u;
-        uint layerPitch = 0;
-
-        for (uint level = 0; level < tex.MipLevels; level++)
-        {
-            GetMipDimensions(tex, level, out uint mipWidth, out uint mipHeight, out uint mipDepth);
-            uint storageWidth = Math.Max(mipWidth, blockSize);
-            uint storageHeight = Math.Max(mipHeight, blockSize);
-            layerPitch += FormatHelpers.GetRegionSize(storageWidth, storageHeight, mipDepth, tex.Format);
-        }
-
-        return layerPitch * arrayLayer;
-    }
-
-    internal static T[] ShallowClone<T>(T[] array)
-    {
-        return (T[])array.Clone();
-    }
-
-    internal static TextureView GetTextureView(GraphicsDevice gd, IBindableResource resource)
-    {
-        if (resource is TextureView view)
-        {
-            return view;
-        }
-
-        if (resource is Texture tex)
-        {
-            return tex.GetFullTextureView(gd);
-        }
-
-        throw new VeldridException(
-            $"Unexpected resource type. Expected Texture or TextureView but found {resource.GetType().Name}");
     }
 
     internal static void PackIntPtr(IntPtr sourcePtr, out uint low, out uint high)
@@ -312,5 +314,34 @@ internal static class Util
     {
         ulong src64 = low | ((ulong)high << 32);
         return (IntPtr)src64;
+    }
+
+    internal static int GetNullTerminatedUtf8(ReadOnlySpan<char> text, ref Span<byte> byteBuffer)
+    {
+        int byteCount = UTF8.GetByteCount(text) + 1;
+        if (byteBuffer.Length < byteCount)
+            byteBuffer = new byte[byteCount];
+
+        int bytesWritten = UTF8.GetBytes(text, byteBuffer);
+        Debug.Assert(bytesWritten == byteCount - 1);
+
+        byteBuffer[byteCount - 1] = 0; // Add null terminator.
+        return bytesWritten;
+    }
+
+    internal static byte[]? GetRentedNullTerminatedUtf8(ReadOnlySpan<char> text, ref Span<byte> byteBuffer)
+    {
+        int byteCount = UTF8.GetByteCount(text) + 1;
+        byte[]? arr = null;
+        if (byteBuffer.Length < byteCount)
+        {
+            byteBuffer = arr = ArrayPool<byte>.Shared.Rent(byteCount);
+        }
+
+        int bytesWritten = UTF8.GetBytes(text, byteBuffer);
+        Debug.Assert(bytesWritten == byteCount - 1);
+
+        byteBuffer[byteCount - 1] = 0; // Add null terminator.
+        return arr;
     }
 }

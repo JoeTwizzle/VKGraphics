@@ -1,49 +1,39 @@
-﻿using System.Diagnostics;
+﻿#if DEBUG
+#define ALLOC_TRACK
+#endif
+
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using OpenTK.Graphics.Vulkan;
+using static OpenTK.Graphics.Vulkan.Vk;
 using static VKGraphics.Vulkan.VulkanUtil;
 
 namespace VKGraphics.Vulkan;
 
-internal unsafe class VkDeviceMemoryManager : IDisposable
+internal sealed unsafe class VkDeviceMemoryManager : IDisposable
 {
-    private const ulong min_dedicated_allocation_size_dynamic = 1024 * 1024 * 64;
-    private const ulong min_dedicated_allocation_size_non_dynamic = 1024 * 1024 * 256;
-    private readonly VkDevice device;
-    private readonly ulong bufferImageGranularity;
-    private readonly object lockObj = new object();
-    private readonly Dictionary<uint, ChunkAllocatorSet> allocatorsByMemoryTypeUnmapped = new Dictionary<uint, ChunkAllocatorSet>();
-    private readonly Dictionary<uint, ChunkAllocatorSet> allocatorsByMemoryType = new Dictionary<uint, ChunkAllocatorSet>();
-
-    private readonly VkGetBufferMemoryRequirements2T getBufferMemoryRequirements2;
-    private readonly VkGetImageMemoryRequirements2T getImageMemoryRequirements2;
+    private readonly VkDevice _device;
+    private readonly VkPhysicalDevice _physicalDevice;
+    private readonly ulong _bufferImageGranularity;
+    private readonly ulong _chunkGranularity;
+    private readonly object _allocatorMutex = new();
+    private readonly Dictionary<uint, ChunkAllocatorSet> _allocatorsByMemoryTypeUnmapped = new();
+    private readonly Dictionary<uint, ChunkAllocatorSet> _allocatorsByMemoryType = new();
 
     public VkDeviceMemoryManager(
         VkDevice device,
+        VkPhysicalDevice physicalDevice,
         ulong bufferImageGranularity,
-        VkGetBufferMemoryRequirements2T getBufferMemoryRequirements2,
-        VkGetImageMemoryRequirements2T getImageMemoryRequirements2)
+        ulong chunkGranularity)
     {
-        this.device = device;
-        this.bufferImageGranularity = bufferImageGranularity;
-        this.getBufferMemoryRequirements2 = getBufferMemoryRequirements2;
-        this.getImageMemoryRequirements2 = getImageMemoryRequirements2;
+        _device = device;
+        _physicalDevice = physicalDevice;
+        _bufferImageGranularity = bufferImageGranularity;
+        _chunkGranularity = chunkGranularity;
     }
-
-    #region Disposal
-
-    public void Dispose()
-    {
-        foreach (var kvp in allocatorsByMemoryType)
-        {
-            kvp.Value.Dispose();
-        }
-
-        foreach (var kvp in allocatorsByMemoryTypeUnmapped)
-        {
-            kvp.Value.Dispose();
-        }
-    }
-
-    #endregion
 
     public VkMemoryBlock Allocate(
         VkPhysicalDeviceMemoryProperties memProperties,
@@ -62,7 +52,7 @@ internal unsafe class VkDeviceMemoryManager : IDisposable
             alignment,
             false,
             VkImage.Zero,
-            OpenTK.Graphics.Vulkan.VkBuffer.Zero);
+            VkBuffer.Zero);
     }
 
     public VkMemoryBlock Allocate(
@@ -74,83 +64,73 @@ internal unsafe class VkDeviceMemoryManager : IDisposable
         ulong alignment,
         bool dedicated,
         VkImage dedicatedImage,
-        OpenTK.Graphics.Vulkan.VkBuffer dedicatedBuffer)
+        VkBuffer dedicatedBuffer)
     {
-        if (dedicated)
+        if (!TryFindMemoryType(memProperties, memoryTypeBits, flags, out uint memoryTypeIndex))
         {
-            if (dedicatedImage != VkImage.Zero && getImageMemoryRequirements2 != null)
+            throw new VeldridException("No suitable memory type.");
+        }
+
+        ulong minDedicatedAllocationSize = persistentMapped
+            ? ChunkAllocator.PersistentMappedChunkSize
+            : ChunkAllocator.UnmappedChunkSize;
+
+        ulong alignedSize = (size + _chunkGranularity - 1) / _chunkGranularity * _chunkGranularity;
+
+        if (dedicated || alignedSize >= minDedicatedAllocationSize)
+        {
+            ulong dedicatedSize;
+            if (dedicatedImage == VkImage.Zero && dedicatedBuffer == VkBuffer.Zero)
             {
-                var requirementsInfo = new VkImageMemoryRequirementsInfo2();
-                requirementsInfo.image = dedicatedImage;
-                var requirements = new VkMemoryRequirements2();
-                getImageMemoryRequirements2(device, &requirementsInfo, &requirements);
-                size = requirements.memoryRequirements.size;
+                // Round up to the nearest multiple of bufferImageGranularity.
+                dedicatedSize = (alignedSize + _bufferImageGranularity - 1) / _bufferImageGranularity * _bufferImageGranularity;
             }
-            else if (dedicatedBuffer != OpenTK.Graphics.Vulkan.VkBuffer.Zero && getBufferMemoryRequirements2 != null)
+            else
             {
-                var requirementsInfo = new VkBufferMemoryRequirementsInfo2();
-                requirementsInfo.buffer = dedicatedBuffer;
-                var requirements = new VkMemoryRequirements2();
-                getBufferMemoryRequirements2(device, &requirementsInfo, &requirements);
-                size = requirements.memoryRequirements.size;
+                // VkMemoryRequirements.size must be met.
+                dedicatedSize = size;
             }
+
+            VkMemoryAllocateInfo allocateInfo = new()
+            {
+                allocationSize = dedicatedSize,
+                memoryTypeIndex = memoryTypeIndex
+            };
+
+            VkMemoryDedicatedAllocateInfo dedicatedAI;
+            if (dedicated)
+            {
+                dedicatedAI = new VkMemoryDedicatedAllocateInfo()
+                {
+                    buffer = dedicatedBuffer,
+                    image = dedicatedImage
+                };
+                allocateInfo.pNext = &dedicatedAI;
+            }
+
+            VkDeviceMemory memory;
+            VkResult allocationResult = AllocateMemory(_device, &allocateInfo, null, &memory);
+            if (allocationResult != VkResult.Success)
+            {
+                throw new VeldridException("Unable to allocate sufficient Vulkan memory.");
+            }
+
+            void* mappedPtr = null;
+            if (persistentMapped)
+            {
+                VkResult mapResult = MapMemory(_device, memory, 0, dedicatedSize, 0, &mappedPtr);
+                if (mapResult != VkResult.Success)
+                {
+                    throw new VeldridException("Unable to map newly-allocated Vulkan memory.");
+                }
+            }
+
+            return new VkMemoryBlock(memory, 0, dedicatedSize, memoryTypeBits, mappedPtr, true);
         }
         else
         {
-            // Round up to the nearest multiple of bufferImageGranularity.
-            size = (size / bufferImageGranularity + 1) * bufferImageGranularity;
-        }
-
-        lock (lockObj)
-        {
-            if (!TryFindMemoryType(memProperties, memoryTypeBits, flags, out uint memoryTypeIndex))
-            {
-                throw new VeldridException("No suitable memory type.");
-            }
-
-            ulong minDedicatedAllocationSize = persistentMapped
-                ? min_dedicated_allocation_size_dynamic
-                : min_dedicated_allocation_size_non_dynamic;
-
-            if (dedicated || size >= minDedicatedAllocationSize)
-            {
-                var allocateInfo = new VkMemoryAllocateInfo();
-                allocateInfo.allocationSize = size;
-                allocateInfo.memoryTypeIndex = memoryTypeIndex;
-
-                // ReSharper disable once TooWideLocalVariableScope
-                VkMemoryDedicatedAllocateInfo dedicatedAi;
-
-                if (dedicated)
-                {
-                    dedicatedAi = new VkMemoryDedicatedAllocateInfo();
-                    dedicatedAi.buffer = dedicatedBuffer;
-                    dedicatedAi.image = dedicatedImage;
-                    allocateInfo.pNext = &dedicatedAi;
-                }
-                VkDeviceMemory memory;
-                var allocationResult = Vk.AllocateMemory(device, &allocateInfo, null, &memory);
-                if (allocationResult != VkResult.Success)
-                {
-                    throw new VeldridException("Unable to allocate sufficient Vulkan memory.");
-                }
-
-                void* mappedPtr = null;
-
-                if (persistentMapped)
-                {
-                    var mapResult = Vk.MapMemory(device, memory, 0, size, 0, &mappedPtr);
-                    if (mapResult != VkResult.Success)
-                    {
-                        throw new VeldridException("Unable to map newly-allocated Vulkan memory.");
-                    }
-                }
-
-                return new VkMemoryBlock(memory, 0, size, memoryTypeBits, mappedPtr, true);
-            }
-
-            var allocator = getAllocator(memoryTypeIndex, persistentMapped);
-            bool result = allocator.Allocate(size, alignment, out var ret);
+            ChunkAllocatorSet allocator = GetAllocator(memoryTypeIndex, persistentMapped);
+            bool result = allocator.Allocate((uint)alignedSize, (uint)alignment, out VkMemoryBlock ret);
             if (!result)
             {
                 throw new VeldridException("Unable to allocate sufficient Vulkan memory.");
@@ -162,248 +142,359 @@ internal unsafe class VkDeviceMemoryManager : IDisposable
 
     public void Free(VkMemoryBlock block)
     {
-        lock (lockObj)
+        if (block.DedicatedAllocation)
         {
-            if (block.DedicatedAllocation)
-            {
-                Vk.FreeMemory(device, block.DeviceMemory, null);
-            }
-            else
-            {
-                getAllocator(block.MemoryTypeIndex, block.IsPersistentMapped).Free(block);
-            }
-        }
-    }
-
-    internal IntPtr Map(VkMemoryBlock memoryBlock)
-    {
-        void* ret;
-        var result = Vk.MapMemory(device, memoryBlock.DeviceMemory, memoryBlock.Offset, memoryBlock.Size, 0, &ret);
-        CheckResult(result);
-        return (IntPtr)ret;
-    }
-
-    private ChunkAllocatorSet getAllocator(uint memoryTypeIndex, bool persistentMapped)
-    {
-        ChunkAllocatorSet ret;
-
-        if (persistentMapped)
-        {
-            if (!allocatorsByMemoryType.TryGetValue(memoryTypeIndex, out ret))
-            {
-                ret = new ChunkAllocatorSet(device, memoryTypeIndex, true);
-                allocatorsByMemoryType.Add(memoryTypeIndex, ret);
-            }
+            FreeMemory(_device, block.DeviceMemory, null);
         }
         else
         {
-            if (!allocatorsByMemoryTypeUnmapped.TryGetValue(memoryTypeIndex, out ret))
-            {
-                ret = new ChunkAllocatorSet(device, memoryTypeIndex, false);
-                allocatorsByMemoryTypeUnmapped.Add(memoryTypeIndex, ret);
-            }
-        }
-
-        return ret;
-    }
-
-    private class ChunkAllocatorSet : IDisposable
-    {
-        private readonly VkDevice device;
-        private readonly uint memoryTypeIndex;
-        private readonly bool persistentMapped;
-        private readonly List<ChunkAllocator> allocators = new List<ChunkAllocator>();
-
-        public ChunkAllocatorSet(VkDevice device, uint memoryTypeIndex, bool persistentMapped)
-        {
-            this.device = device;
-            this.memoryTypeIndex = memoryTypeIndex;
-            this.persistentMapped = persistentMapped;
-        }
-
-        #region Disposal
-
-        public void Dispose()
-        {
-            foreach (var allocator in allocators)
-            {
-                allocator.Dispose();
-            }
-        }
-
-        #endregion
-
-        public bool Allocate(ulong size, ulong alignment, out VkMemoryBlock block)
-        {
-            foreach (var allocator in allocators)
-            {
-                if (allocator.Allocate(size, alignment, out block))
-                {
-                    return true;
-                }
-            }
-
-            var newAllocator = new ChunkAllocator(device, memoryTypeIndex, persistentMapped);
-            allocators.Add(newAllocator);
-            return newAllocator.Allocate(size, alignment, out block);
-        }
-
-        public void Free(VkMemoryBlock block)
-        {
-            foreach (var chunk in allocators)
-            {
-                if (chunk.Memory == block.DeviceMemory)
-                {
-                    chunk.Free(block);
-                }
-            }
+            GetAllocator(block.MemoryTypeIndex, block.IsPersistentMapped).Free(block);
         }
     }
 
-    private class ChunkAllocator : IDisposable
+    private ChunkAllocatorSet GetAllocator(uint memoryTypeIndex, bool persistentMapped)
     {
-        public VkDeviceMemory Memory => memory;
-        private const ulong persistent_mapped_chunk_size = 1024 * 1024 * 64;
-        private const ulong unmapped_chunk_size = 1024 * 1024 * 256;
-        private readonly VkDevice device;
-        private readonly uint memoryTypeIndex;
-        private readonly List<VkMemoryBlock> freeBlocks = new List<VkMemoryBlock>();
-        private readonly VkDeviceMemory memory;
-        private readonly void* mappedPtr;
-
-        public ChunkAllocator(VkDevice device, uint memoryTypeIndex, bool persistentMapped)
+        lock (_allocatorMutex)
         {
-            this.device = device;
-            this.memoryTypeIndex = memoryTypeIndex;
-            ulong totalMemorySize = persistentMapped ? persistent_mapped_chunk_size : unmapped_chunk_size;
-
-            var memoryAi = new VkMemoryAllocateInfo();
-            memoryAi.allocationSize = totalMemorySize;
-            memoryAi.memoryTypeIndex = this.memoryTypeIndex;
-
-            VkDeviceMemory vkmemory;
-            var result = Vk.AllocateMemory(this.device, &memoryAi, null, &vkmemory);
-            memory = vkmemory;
-
-            CheckResult(result);
+            ChunkAllocatorSet? ret;
 
             if (persistentMapped)
             {
-                void* ptr = null;
-
-                result = Vk.MapMemory(this.device, memory, 0, totalMemorySize, 0, &ptr);
-                CheckResult(result);
-
-                mappedPtr = ptr;
+                if (!_allocatorsByMemoryType.TryGetValue(memoryTypeIndex, out ret))
+                {
+                    ret = new ChunkAllocatorSet(_device, memoryTypeIndex, true);
+                    _allocatorsByMemoryType.Add(memoryTypeIndex, ret);
+                }
+            }
+            else
+            {
+                if (!_allocatorsByMemoryTypeUnmapped.TryGetValue(memoryTypeIndex, out ret))
+                {
+                    ret = new ChunkAllocatorSet(_device, memoryTypeIndex, false);
+                    _allocatorsByMemoryTypeUnmapped.Add(memoryTypeIndex, ret);
+                }
             }
 
-            var initialBlock = new VkMemoryBlock(
-                memory,
-                0,
-                totalMemorySize,
-                this.memoryTypeIndex,
-                mappedPtr,
-                false);
-            freeBlocks.Add(initialBlock);
+            return ret;
+        }
+    }
+
+    private sealed class ChunkAllocatorSet : IDisposable
+    {
+        private readonly VkDevice _device;
+        private readonly uint _memoryTypeIndex;
+        private readonly bool _persistentMapped;
+        private readonly object _mutex = new();
+        private readonly List<ChunkAllocator> _allocators = new();
+
+        public ChunkAllocatorSet(VkDevice device, uint memoryTypeIndex, bool persistentMapped)
+        {
+            _device = device;
+            _memoryTypeIndex = memoryTypeIndex;
+            _persistentMapped = persistentMapped;
         }
 
-        #region Disposal
-
-        public void Dispose()
+        public bool Allocate(uint size, uint alignment, out VkMemoryBlock block)
         {
-            Vk.FreeMemory(device, memory, null);
-        }
-
-        #endregion
-
-        public bool Allocate(ulong size, ulong alignment, out VkMemoryBlock block)
-        {
-            checked
+            lock (_mutex)
             {
-                for (int i = 0; i < freeBlocks.Count; i++)
+                List<ChunkAllocator> allocators = _allocators;
+                for (int i = 0; i < allocators.Count; i++)
                 {
-                    var freeBlock = freeBlocks[i];
-                    ulong alignedBlockSize = freeBlock.Size;
-
-                    if (freeBlock.Offset % alignment != 0)
+                    ChunkAllocator allocator = allocators[i];
+                    if (allocator.Allocate(size, alignment, out block))
                     {
-                        ulong alignmentCorrection = alignment - freeBlock.Offset % alignment;
-                        if (alignedBlockSize <= alignmentCorrection)
-                        {
-                            continue;
-                        }
-
-                        alignedBlockSize -= alignmentCorrection;
-                    }
-
-                    if (alignedBlockSize >= size) // Valid match -- split it and return.
-                    {
-                        freeBlocks.RemoveAt(i);
-
-                        freeBlock.Size = alignedBlockSize;
-                        if (freeBlock.Offset % alignment != 0)
-                        {
-                            freeBlock.Offset += alignment - freeBlock.Offset % alignment;
-                        }
-
-                        block = freeBlock;
-
-                        if (alignedBlockSize != size)
-                        {
-                            var splitBlock = new VkMemoryBlock(
-                                freeBlock.DeviceMemory,
-                                freeBlock.Offset + size,
-                                freeBlock.Size - size,
-                                memoryTypeIndex,
-                                freeBlock.BaseMappedPointer,
-                                false);
-                            freeBlocks.Insert(i, splitBlock);
-                            block = freeBlock;
-                            block.Size = size;
-                        }
-
-#if DEBUG
-                        checkAllocatedBlock(block);
-#endif
                         return true;
                     }
                 }
 
-                block = default;
-                return false;
+                ChunkAllocator newAllocator = new(_device, _memoryTypeIndex, _persistentMapped);
+                allocators.Add(newAllocator);
+                return newAllocator.Allocate(size, alignment, out block);
             }
         }
 
         public void Free(VkMemoryBlock block)
         {
-            for (int i = 0; i < freeBlocks.Count; i++)
+            lock (_mutex)
             {
-                if (freeBlocks[i].Offset > block.Offset)
+                List<ChunkAllocator> allocators = _allocators;
+                for (int i = 0; i < allocators.Count; i++)
                 {
-                    freeBlocks.Insert(i, block);
-                    mergeContiguousBlocks();
-#if DEBUG
-                    removeAllocatedBlock(block);
+                    ChunkAllocator allocator = allocators[i];
+                    if (allocator.Memory == block.DeviceMemory)
+                    {
+                        allocator.Free(block);
+
+                        // Free may have merged free blocks.
+                        if (allocator.IsFullFreeBlock())
+                        {
+                            // The allocator is a free contiguous block so dispose it.
+                            allocator.Dispose();
+
+                            allocators.RemoveAt(i);
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
+        public void Dispose()
+        {
+            lock (_mutex)
+            {
+                foreach (ChunkAllocator allocator in _allocators)
+                {
+                    allocator.Dispose();
+                }
+                _allocators.Clear();
+            }
+        }
+    }
+
+    private sealed class ChunkAllocator : IDisposable
+    {
+        public const ulong PersistentMappedChunkSize = 1024 * 1024;
+        public const ulong UnmappedChunkSize = 1024 * 1024 * 8;
+
+        private readonly VkDevice _device;
+        private readonly uint _memoryTypeIndex;
+        private readonly bool _persistentMapped;
+        private readonly List<VkMemoryBlock> _freeBlocks = new();
+        private readonly void* _mappedPtr;
+        private readonly ulong _totalMemorySize;
+
+#if ALLOC_TRACK
+        private SortedList<uint, ulong> _allocatedBlocks = new();
 #endif
-                    return;
+
+        public readonly VkDeviceMemory Memory;
+
+        public ChunkAllocator(VkDevice device, uint memoryTypeIndex, bool persistentMapped)
+        {
+            _device = device;
+            _memoryTypeIndex = memoryTypeIndex;
+            _persistentMapped = persistentMapped;
+            _totalMemorySize = persistentMapped ? PersistentMappedChunkSize : UnmappedChunkSize;
+
+            VkMemoryAllocateInfo memoryAI = new()
+            {
+                allocationSize = _totalMemorySize,
+                memoryTypeIndex = _memoryTypeIndex
+            };
+            VkDeviceMemory memory;
+            VkResult result = AllocateMemory(_device, &memoryAI, null, &memory);
+            CheckResult(result);
+            Memory = memory;
+
+            void* mappedPtr = null;
+            if (persistentMapped)
+            {
+                result = MapMemory(_device, Memory, 0, _totalMemorySize, 0, &mappedPtr);
+                CheckResult(result);
+            }
+            _mappedPtr = mappedPtr;
+
+            VkMemoryBlock initialBlock = new(
+                Memory,
+                0,
+                _totalMemorySize,
+                _memoryTypeIndex,
+                _mappedPtr,
+                false);
+            _freeBlocks.Add(initialBlock);
+        }
+
+        public bool Allocate(uint size, uint alignment, out VkMemoryBlock resultBlock)
+        {
+            if (_freeBlocks.Count == 0)
+            {
+                resultBlock = default;
+                return false;
+            }
+
+            Span<VkMemoryBlock> freeBlocks = CollectionsMarshal.AsSpan(_freeBlocks);
+
+            ulong alignedBlockSize = 0;
+            uint alignedOffsetRemainder = 0;
+
+            int selectedIndex = -1;
+            for (int i = 0; i < freeBlocks.Length; i++)
+            {
+                ref VkMemoryBlock block = ref freeBlocks[i];
+                alignedBlockSize = block.Size;
+                alignedOffsetRemainder = block.Offset % alignment;
+                if (alignedOffsetRemainder != 0)
+                {
+                    ulong alignmentCorrection = alignment - alignedOffsetRemainder;
+                    if (alignedBlockSize <= alignmentCorrection)
+                    {
+                        continue;
+                    }
+                    alignedBlockSize -= alignmentCorrection;
+                }
+
+                if (alignedBlockSize >= size) // Valid match -- split it and return.
+                {
+                    selectedIndex = i;
+                    break;
                 }
             }
 
-            freeBlocks.Add(block);
-#if DEBUG
-            removeAllocatedBlock(block);
+            if (selectedIndex != -1)
+            {
+                VkMemoryBlock block = freeBlocks[selectedIndex];
+                if (alignedOffsetRemainder != 0)
+                {
+                    uint offset = alignment - alignedOffsetRemainder;
+
+                    VkMemoryBlock splitBlock = new(
+                        block.DeviceMemory,
+                        block.Offset,
+                        offset,
+                        _memoryTypeIndex,
+                        block.BaseMappedPointer,
+                        false);
+                    _freeBlocks.Insert(selectedIndex, splitBlock);
+                    selectedIndex++;
+
+                    block.Offset += offset;
+                }
+                block.Size = alignedBlockSize;
+
+                if (alignedBlockSize != size)
+                {
+                    VkMemoryBlock splitBlock = new(
+                        block.DeviceMemory,
+                        block.Offset + size,
+                        block.Size - size,
+                        _memoryTypeIndex,
+                        block.BaseMappedPointer,
+                        false);
+
+                    _freeBlocks[selectedIndex] = splitBlock;
+                    block.Size = size;
+                }
+                else
+                {
+                    _freeBlocks.RemoveAt(selectedIndex);
+                }
+
+#if ALLOC_TRACK
+                CheckAllocatedBlock(block.Offset, block.Size);
+#endif
+                resultBlock = block;
+                return true;
+            }
+
+#if ALLOC_TRACK
+            bool hasMergedBlocks = MergeContiguousBlocks();
+            TrackAssert(!hasMergedBlocks, "Free method was not effective at merging blocks.");
+#endif
+
+            resultBlock = default;
+            return false;
+        }
+
+        private static int FindPrecedingBlockIndex(ReadOnlySpan<VkMemoryBlock> list, ulong targetOffset)
+        {
+            int low = 0;
+            int high = list.Length - 1;
+            ref VkMemoryBlock b = ref MemoryMarshal.GetReference(list);
+
+            if (list.Length == 0 || Unsafe.Add(ref b, high).Offset < targetOffset)
+                return -1;
+
+            while (low <= high)
+            {
+                int mid = low + (high - low) / 2;
+
+                if (Unsafe.Add(ref b, mid).Offset >= targetOffset)
+                    high = mid - 1;
+                else
+                    low = mid + 1;
+            }
+
+            return high + 1;
+        }
+
+        public void Free(VkMemoryBlock block)
+        {
+            Span<VkMemoryBlock> freeBlocks = CollectionsMarshal.AsSpan(_freeBlocks);
+
+            // The free block list should always be sorted by offset.
+            // List mutations done by this algorithm must preserve order. 
+
+            int precedingBlock = FindPrecedingBlockIndex(freeBlocks, block.Offset);
+            if (precedingBlock != -1)
+            {
+                if ((uint)precedingBlock < (uint)freeBlocks.Length &&
+                    block.End == freeBlocks[precedingBlock].Offset)
+                {
+                    // Free block ends at the beginning of found block; merge with found block.
+                    freeBlocks[precedingBlock].Size += block.Size;
+                    freeBlocks[precedingBlock].Offset = block.Offset;
+
+                    int prevBlock = precedingBlock - 1;
+                    if ((uint)prevBlock < (uint)freeBlocks.Length &&
+                        freeBlocks[prevBlock].End == freeBlocks[precedingBlock].Offset)
+                    {
+                        // Merged block begins at the end of the previous block; extend the previous block.
+                        freeBlocks[prevBlock].Size += freeBlocks[precedingBlock].Size;
+                        _freeBlocks.RemoveAt(precedingBlock);
+                    }
+                }
+                else
+                {
+                    int prevBlock = precedingBlock - 1;
+                    if ((uint)prevBlock < (uint)freeBlocks.Length &&
+                        freeBlocks[prevBlock].End == block.Offset)
+                    {
+                        // Free block begins at the end of found block; extend the previous block.
+                        freeBlocks[prevBlock].Size += block.Size;
+                    }
+                    else
+                    {
+                        // Free block could not be merged with previous or found block.
+                        _freeBlocks.Insert(precedingBlock, block);
+                    }
+                }
+            }
+            else
+            {
+                int lastIndex = freeBlocks.Length - 1;
+                if ((uint)lastIndex < (uint)freeBlocks.Length &&
+                    freeBlocks[lastIndex].End == block.Offset)
+                {
+                    // Free block begins at the end of last block; extend the last block.
+                    freeBlocks[lastIndex].Size += block.Size;
+                }
+                else
+                {
+                    // Free block is at the end of the list.
+                    _freeBlocks.Add(block);
+                }
+            }
+
+#if ALLOC_TRACK
+            RemoveAllocatedBlock(block.Offset);
 #endif
         }
 
-        private void mergeContiguousBlocks()
+
+#if ALLOC_TRACK
+        private bool MergeContiguousBlocks()
         {
+            List<VkMemoryBlock> freeBlocks = _freeBlocks;
+            bool hasMerged = false;
             int contiguousLength = 1;
 
             for (int i = 0; i < freeBlocks.Count - 1; i++)
             {
-                ulong blockStart = freeBlocks[i].Offset;
+                uint blockStart = freeBlocks[i].Offset;
                 while (i + contiguousLength < freeBlocks.Count
-                       && freeBlocks[i + contiguousLength - 1].End == freeBlocks[i + contiguousLength].Offset)
+                    && freeBlocks[i + contiguousLength - 1].End == freeBlocks[i + contiguousLength].Offset)
                 {
                     contiguousLength += 1;
                 }
@@ -412,71 +503,134 @@ internal unsafe class VkDeviceMemoryManager : IDisposable
                 {
                     ulong blockEnd = freeBlocks[i + contiguousLength - 1].End;
                     freeBlocks.RemoveRange(i, contiguousLength);
-                    var mergedBlock = new VkMemoryBlock(
+
+                    VkMemoryBlock mergedBlock = new(
                         Memory,
                         blockStart,
                         blockEnd - blockStart,
-                        memoryTypeIndex,
-                        mappedPtr,
+                        _memoryTypeIndex,
+                        _mappedPtr,
                         false);
                     freeBlocks.Insert(i, mergedBlock);
+                    hasMerged = true;
                     contiguousLength = 0;
                 }
             }
+
+            return hasMerged;
         }
 
-#if DEBUG
-        private readonly List<VkMemoryBlock> allocatedBlocks = new List<VkMemoryBlock>();
-
-        private void checkAllocatedBlock(VkMemoryBlock block)
+        private void CheckAllocatedBlock(uint offset, ulong size)
         {
-            foreach (var oldBlock in allocatedBlocks)
+            _allocatedBlocks.Add(offset, size); // Throws on same key added twice.
+
+            int index = _allocatedBlocks.IndexOfKey(offset);
+
+            if (index > 0)
             {
-                Debug.Assert(!blocksOverlap(block, oldBlock), "Allocated blocks have overlapped.");
+                uint leftOffset = _allocatedBlocks.Keys[index - 1];
+                ulong leftSize = _allocatedBlocks.Values[index - 1];
+                TrackAssert(!BlocksOverlap(offset, size, leftOffset, leftSize), "Allocated segments have overlapped.");
             }
 
-            allocatedBlocks.Add(block);
+            if (index < _allocatedBlocks.Count - 1)
+            {
+                uint rightOffset = _allocatedBlocks.Keys[index + 1];
+                ulong rightSize = _allocatedBlocks.Values[index + 1];
+                TrackAssert(!BlocksOverlap(offset, size, rightOffset, rightSize), "Allocated segments have overlapped.");
+            }
         }
 
-        private bool blocksOverlap(VkMemoryBlock first, VkMemoryBlock second)
+        private static bool BlocksOverlap(uint firstOffset, ulong firstSize, uint secondOffset, ulong secondSize)
         {
-            ulong firstStart = first.Offset;
-            ulong firstEnd = first.Offset + first.Size;
-            ulong secondStart = second.Offset;
-            ulong secondEnd = second.Offset + second.Size;
+            ulong firstStart = firstOffset;
+            ulong firstEnd = firstOffset + firstSize;
+            ulong secondStart = secondOffset;
+            ulong secondEnd = secondOffset + secondSize;
 
-            return (firstStart <= secondStart && firstEnd > secondStart)
-                   || (firstStart >= secondStart && firstEnd <= secondEnd)
-                   || (firstStart < secondEnd && firstEnd >= secondEnd)
-                   || (firstStart <= secondStart && firstEnd >= secondEnd);
+            return (firstStart <= secondStart && firstEnd > secondStart
+                || firstStart >= secondStart && firstEnd <= secondEnd
+                || firstStart < secondEnd && firstEnd >= secondEnd
+                || firstStart <= secondStart && firstEnd >= secondEnd);
         }
 
-        private void removeAllocatedBlock(VkMemoryBlock block)
+        private void RemoveAllocatedBlock(uint offset)
         {
-            Debug.Assert(allocatedBlocks.Remove(block), "Unable to remove a supposedly allocated block.");
+            TrackAssert(_allocatedBlocks.Remove(offset), "Unable to remove a supposedly allocated block.");
+        }
+
+        private static void TrackAssert(bool condition, string message)
+        {
+            if (!condition)
+            {
+                ThrowTrackException(message);
+            }
+        }
+
+        private static void ThrowTrackException(string message)
+        {
+            throw new InvalidOperationException(message);
         }
 #endif
+
+        public bool IsFullFreeBlock()
+        {
+            if (_freeBlocks.Count == 1)
+            {
+                return IsFirstFullFreeBlock();
+            }
+            return false;
+        }
+
+        private bool IsFirstFullFreeBlock()
+        {
+            ref VkMemoryBlock freeBlock = ref MemoryMarshal.GetReference(CollectionsMarshal.AsSpan(_freeBlocks));
+            return freeBlock.Offset == 0
+                && freeBlock.Size == _totalMemorySize;
+        }
+
+        public void Dispose()
+        {
+            FreeMemory(_device, Memory, null);
+        }
+    }
+
+    public void Dispose()
+    {
+        lock (_allocatorMutex)
+        {
+            foreach (KeyValuePair<uint, ChunkAllocatorSet> kvp in _allocatorsByMemoryType)
+            {
+                kvp.Value.Dispose();
+            }
+
+            foreach (KeyValuePair<uint, ChunkAllocatorSet> kvp in _allocatorsByMemoryTypeUnmapped)
+            {
+                kvp.Value.Dispose();
+            }
+        }
     }
 }
 
-[DebuggerDisplay("[Mem:{DeviceMemory.Handle}] Off:{Offset}, Size:{Size} End:{Offset+Size}")]
+[DebuggerDisplay($"{{{nameof(GetDebuggerDisplay)}(),nq}}")]
 internal unsafe struct VkMemoryBlock : IEquatable<VkMemoryBlock>
 {
-    public readonly uint MemoryTypeIndex;
+    private readonly uint MemoryType;
     public readonly VkDeviceMemory DeviceMemory;
     public readonly void* BaseMappedPointer;
-    public readonly bool DedicatedAllocation;
 
-    public ulong Offset;
+    public uint Offset;
     public ulong Size;
 
-    public void* BlockMappedPointer => (byte*)BaseMappedPointer + Offset;
-    public bool IsPersistentMapped => BaseMappedPointer != null;
-    public ulong End => Offset + Size;
+    public readonly void* BlockMappedPointer => (byte*)BaseMappedPointer + Offset;
+    public readonly bool IsPersistentMapped => BaseMappedPointer != null;
+    public readonly ulong End => Offset + Size;
+    public readonly uint MemoryTypeIndex => MemoryType & 31;
+    public readonly bool DedicatedAllocation => (MemoryType >> 5 & 1) != 0;
 
     public VkMemoryBlock(
         VkDeviceMemory memory,
-        ulong offset,
+        uint offset,
         ulong size,
         uint memoryTypeIndex,
         void* mappedPtr,
@@ -485,15 +639,22 @@ internal unsafe struct VkMemoryBlock : IEquatable<VkMemoryBlock>
         DeviceMemory = memory;
         Offset = offset;
         Size = size;
-        MemoryTypeIndex = memoryTypeIndex;
+        MemoryType = memoryTypeIndex;
         BaseMappedPointer = mappedPtr;
-        DedicatedAllocation = dedicatedAllocation;
+
+        if (dedicatedAllocation)
+            MemoryType |= 1u << 5;
     }
 
-    public bool Equals(VkMemoryBlock other)
+    public readonly bool Equals(VkMemoryBlock other)
     {
         return DeviceMemory.Equals(other.DeviceMemory)
-               && Offset.Equals(other.Offset)
-               && Size.Equals(other.Size);
+            && Offset.Equals(other.Offset)
+            && Size.Equals(other.Size);
+    }
+
+    private string GetDebuggerDisplay()
+    {
+        return $"[Mem:{DeviceMemory.Handle:x}] Off:{Offset}, Size:{Size}, End:{Offset + Size}";
     }
 }
