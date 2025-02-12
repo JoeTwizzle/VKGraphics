@@ -2,7 +2,7 @@
 
 namespace VKGraphics.Vulkan;
 
-internal interface ISynchronizedResource : Vulkan.IResourceRefCountTarget
+internal interface ISynchronizedResource : IResourceRefCountTarget
 {
     //ref SyncState SyncState { get; }
     Span<SyncState> AllSyncStates { get; }

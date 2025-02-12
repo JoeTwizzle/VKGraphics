@@ -1,11 +1,27 @@
-﻿namespace VKGraphics.Vulkan;
+﻿
+namespace VKGraphics.Vulkan;
 
-internal struct VkVersion
+internal struct VkVersion : IEquatable<VkVersion>
 {
     public static uint API_VERSION_VARIANT(uint version) => (version) >> 29;
     public static uint API_VERSION_MAJOR(uint version) => (version >> 22) & 0x7FU;
     public static uint API_VERSION_MINOR(uint version) => (version >> 12) & 0x3FFU;
     public static uint API_VERSION_PATCH(uint version) => (version) & 0xFFFU;
+
+    public override bool Equals(object? obj)
+    {
+        return obj is VkVersion version && Equals(version);
+    }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(value, Variant, Major, Minor, Patch);
+    }
+
+    public bool Equals(VkVersion other)
+    {
+        return value == other.value;
+    }
 
     public uint value;
 

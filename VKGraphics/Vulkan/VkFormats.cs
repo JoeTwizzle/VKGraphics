@@ -14,7 +14,6 @@ using static VkDescriptorType;
 using static VkFilter;
 using static VkFormat;
 using static VkImageType;
-using static VkCullModeFlagBits;
 using static VkIndexType;
 using static VkPolygonMode;
 using static VkPrimitiveTopology;

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using OpenTK.Platform;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
@@ -13,12 +14,12 @@ internal static class SpirvCompiler
     {
         glslFile = Path.GetFullPath(glslFile);
         var outputFile = Path.ChangeExtension(glslFile, ".spv");
-
-        if (!File.Exists(outputFile))
+        if (!File.Exists(outputFile) || File.GetLastWriteTime(glslFile) > File.GetLastWriteTime(outputFile))
         {
+            Console.WriteLine("XD");
             if (!CompileGlslToSpirv(glslFile))
             {
-                throw new InvalidOperationException("oops");
+                throw new InvalidOperationException("Error compiling spirv shader");
             }
         }
         return File.ReadAllBytes(outputFile);
@@ -33,7 +34,7 @@ internal static class SpirvCompiler
             glslFile.EndsWith(".frag") ? " -V -S frag " :
             glslFile.EndsWith(".comp") ? " -V -S comp " : "";
 
-        ProcessStartInfo psi = new ProcessStartInfo
+        ProcessStartInfo psi = new()
         {
             FileName = "glslangValidator.exe",
             Arguments = $"{stageArg} -o \"{outputFile}\" \"{glslFile}\"",
@@ -43,8 +44,7 @@ internal static class SpirvCompiler
             CreateNoWindow = true
         };
 
-        using Process process = new Process { StartInfo = psi };
-
+        using Process process = new() { StartInfo = psi };
         process.Start();
         process.WaitForExit();
         string output = process.StandardOutput.ReadToEnd();
@@ -52,5 +52,5 @@ internal static class SpirvCompiler
 
         return process.ExitCode == 0;
     }
-   
+
 }
