@@ -5,14 +5,17 @@ using Example.VolumeRenderer.Dynamic;
 namespace Example;
 internal sealed class Game : IDisposable
 {
-    public Metrics _metrics;
-    public GameLoop _gameLoop;
-    public WindowHandler _windowHandler;
-    public OpenWindowHandle _mainWindowHandle;
-    public WindowInfo _mainWindowInfo;
-    public DynamicVoxelRenderer _renderer;
+    private Metrics _metrics;
+    private GameLoop _gameLoop;
+    private WindowHandler _windowHandler;
+    private OpenWindowHandle _mainWindowHandle;
+    private WindowInfo _mainWindowInfo;
+    private DynamicVoxelRenderer _renderer;
 
     public float DeltaTime => _metrics.DeltaTime;
+    public double DeltaTimeFull => _metrics.DeltaTimeFull;
+    public Input Input => _mainWindowInfo.Input;
+
 
     public Game()
     {
@@ -36,25 +39,26 @@ internal sealed class Game : IDisposable
         if (args is CloseEventArgs)
         {
             _gameLoop.ShouldRun = false;
-        }
+        }     
     }
 
     void Initialize()
     {
+        _renderer.Init();
+    }
 
+    void Update()
+    {
+        _windowHandler.Update();
+        Toolkit.Window.ProcessEvents(false);
+        _mainWindowInfo.EventQueue.DispatchEvents();
+        _renderer.Update();
     }
 
     void Destroy()
     {
         _renderer.Dispose();
         _windowHandler.Close(_mainWindowHandle);
-    }
-
-    void Update()
-    {
-        _windowHandler.Update();
-        _mainWindowInfo.EventQueue.DispatchEvents();
-        _renderer.Update();
     }
 
     public void Dispose()

@@ -13,7 +13,7 @@ namespace Example.VolumeRenderer.Dynamic
         readonly WindowHandle window;
         readonly GraphicsDevice gd;
         readonly CommandList cl;
-        const int pixelSize = 1;
+        const int pixelSize = 2;
         //camera
         readonly DeviceBuffer cameraBuffer;
         readonly ResourceSet cameraSet;
@@ -21,7 +21,7 @@ namespace Example.VolumeRenderer.Dynamic
         //Raytracing
         readonly Pipeline raytracePipeline;
         readonly ResourceLayout voxelLayout;
-        readonly ResourceSet voxelSet;
+        ResourceSet voxelSet;
 
         //Textures
         Texture mainTex;
@@ -34,7 +34,7 @@ namespace Example.VolumeRenderer.Dynamic
         readonly Pipeline displayPipline;
         readonly Swapchain swapchain;
         public Camera Camera { get; }
-
+        ResourceFactory rf;
         static uint GetUBOSize(int size)
         {
             return (uint)(((size - 1) / 16 + 1) * 16);
@@ -90,7 +90,7 @@ namespace Example.VolumeRenderer.Dynamic
             this.window = window;
             Toolkit.Window.GetFramebufferSize(window, out framebufferSize);
             gd = GraphicsDevice.CreateVulkan(new GraphicsDeviceOptions(true, null, false, ResourceBindingModel.Improved, true, false));
-            ResourceFactory rf = gd.ResourceFactory;
+            rf = gd.ResourceFactory;
             swapchain = rf.CreateSwapchain(new SwapchainDescription(window, (uint)800, 600, null, false));
             //Create Camera buffer
             Camera.AspectRatio = framebufferSize.X / (float)framebufferSize.Y;
@@ -109,13 +109,6 @@ namespace Example.VolumeRenderer.Dynamic
             voxelLayout = rf.CreateResourceLayout(new ResourceLayoutDescription(
                     new ResourceLayoutElementDescription("VoxDataBuf", ResourceKind.StructuredBufferReadOnly, ShaderStages.Compute)
                 ));
-
-            var chunks = CreateBricks(1024, 20);
-            var chunkBuffer = rf.CreateBuffer(new BufferDescription((uint)(sizeof(ulong) * chunks.Length), BufferUsage.StructuredBufferReadOnly));
-            gd.UpdateBuffer(chunkBuffer, 0, ref chunks[0], (uint)(sizeof(ulong) * chunks.Length));
-
-            voxelSet = rf.CreateResourceSet(new ResourceSetDescription(voxelLayout, chunkBuffer));
-
 
             renderBufferLayout = rf.CreateResourceLayout(new ResourceLayoutDescription(
                 new ResourceLayoutElementDescription("screen", ResourceKind.TextureReadWrite, ShaderStages.Compute)
@@ -177,9 +170,18 @@ namespace Example.VolumeRenderer.Dynamic
             CreateTextures(framebufferSize, gd.ResourceFactory);
         }
 
+        public void Init()
+        {
+            var chunks = CreateBricks(1024, 20);
+            var chunkBuffer = rf.CreateBuffer(new BufferDescription((uint)(sizeof(ulong) * chunks.Length), BufferUsage.StructuredBufferReadOnly));
+            gd.UpdateBuffer(chunkBuffer, 0, ref chunks[0], (uint)(sizeof(ulong) * chunks.Length));
+
+            voxelSet = rf.CreateResourceSet(new ResourceSetDescription(voxelLayout, chunkBuffer));
+        }
+
         public void Update()
         {
-            Camera.Update(game.DeltaTime);
+            Camera.Update(game.Input, game.DeltaTime);
             Toolkit.Window.GetFramebufferSize(window, out var newFramebufferSize);
 
             if ((framebufferSize != newFramebufferSize))

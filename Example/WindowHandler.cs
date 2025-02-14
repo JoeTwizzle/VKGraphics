@@ -11,11 +11,13 @@ public readonly struct WindowInfo
 {
     public readonly WindowHandle Handle;
     public readonly EventQueue EventQueue;
+    public readonly Input Input;
 
-    public WindowInfo(WindowHandle handle, EventQueue eventQueue)
+    public WindowInfo(WindowHandle handle, EventQueue eventQueue, Input input)
     {
         Handle = handle;
         EventQueue = eventQueue;
+        Input = input;
     }
 }
 
@@ -53,7 +55,10 @@ internal class WindowHandler
         Toolkit.Window.SetClientSize(window, new(800, 600));
         Toolkit.Window.SetBorderStyle(window, WindowBorderStyle.ResizableBorder);
         Toolkit.Window.SetMode(window, WindowMode.Normal);
-
+        if (Toolkit.Mouse.SupportsRawMouseMotion)
+        {
+            Toolkit.Mouse.EnableRawMouseMotion(window, true);
+        }
         var eventQueue = EventQueue.Subscribe(window);
         int handle;
         if (_recycledHandles.Count > 0)
@@ -64,13 +69,9 @@ internal class WindowHandler
         {
             handle = ++_createWindows;
         }
-        _windows.Add(handle, new WindowInfo(window, eventQueue));
+        var input = new Input(window, eventQueue);
+        _windows.Add(handle, new WindowInfo(window, eventQueue, input));
         return new OpenWindowHandle(handle);
-    }
-
-    public void Update()
-    {
-        Toolkit.Window.ProcessEvents(false);
     }
 
     public void Close(OpenWindowHandle handle)
@@ -84,5 +85,13 @@ internal class WindowHandler
         Toolkit.Window.Destroy(info.Handle);
 
         _recycledHandles.Enqueue(handle.Handle);
+    }
+
+    public void Update()
+    {
+        foreach (var info in _windows.Values)
+        {
+            info.Input.Update();
+        }
     }
 }

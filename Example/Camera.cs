@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using OpenTK.Platform;
+using System.Numerics;
 namespace Example;
 
 sealed class Camera
@@ -114,72 +115,88 @@ sealed class Camera
     bool rotate = true;
     float rotation = 0f;
     const float rotationSpeed = 360f / 10f;
-    public void Update(/*Input Input,*/ float dt)
+    public void Update(Input input, float dt)
     {
         float speedRot = 3.4f;
         float speed = 32f;
-        //if (Input.GetKeyDown(Key.P))
-        //{
-        //    rotate = !rotate;
-        //}
+        if (input.KeyPressed(Scancode.P))
+        {
+            rotate = !rotate;
+            if (rotate)
+            {
+                input.CursorCaptureMode = CursorCaptureMode.Normal;
+            }
+            else
+            {
+                input.CursorCaptureMode = CursorCaptureMode.Locked;
+            }
+        }
         if (rotate)
         {
             rotation += rotationSpeed * dt;
             rotation %= 360f;
             parent.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, ToRadians * rotation);
         }
-        //if (Input.GetKey(Key.LeftControl))
-        //{
-        //    speed = 100f;
-        //}
+        else
+        {
+            angleX -= dt * input.MouseDelta.X;
+            angleY -= dt * input.MouseDelta.Y;
+        }
+        if (input.KeyHeld(Scancode.LeftControl))
+        {
+            speed = 100f;
+        }
         var fwd = Transform.LocalForward;
         fwd = Vector3.Normalize(new Vector3(fwd.X, 0, fwd.Z));
-        //if (Input.GetKey(Key.W))
-        //{
-        //    Transform.LocalPosition -= fwd * speed * dt;
-        //}
-        //if (Input.GetKey(Key.S))
-        //{
-        //    Transform.LocalPosition += fwd * speed * dt;
-        //}
-        //if (Input.GetKey(Key.A))
-        //{
-        //    Transform.LocalPosition -= Transform.LocalRight * speed * dt * (Transform.LocalUp.Y < 0 ? -1 : 1);
-        //}
-        //if (Input.GetKey(Key.D))
-        //{
-        //    Transform.LocalPosition += Transform.LocalRight * speed * dt * (Transform.LocalUp.Y < 0 ? -1 : 1); ;
-        //}
-        //if (Input.GetKey(Key.Space))
-        //{
-        //    Transform.LocalPosition += new Vector3(0, dt, 0) * speed;
-        //}
-        //if (Input.GetKey(Key.LeftShift))
-        //{
-        //    Transform.LocalPosition -= new Vector3(0, dt, 0) * speed;
-        //}
+        if (input.KeyHeld(Scancode.W))
+        {
+            Transform.LocalPosition -= fwd * speed * dt;
+        }
+        if (input.KeyHeld(Scancode.S))
+        {
+            Transform.LocalPosition += fwd * speed * dt;
+        }
+        if (input.KeyHeld(Scancode.A))
+        {
+            Transform.LocalPosition -= Transform.LocalRight * speed * dt * (Transform.LocalUp.Y < 0 ? -1 : 1);
+        }
+        if (input.KeyHeld(Scancode.D))
+        {
+            Transform.LocalPosition += Transform.LocalRight * speed * dt * (Transform.LocalUp.Y < 0 ? -1 : 1); ;
+        }
+        if (input.KeyHeld(Scancode.Spacebar))
+        {
+            Transform.LocalPosition += new Vector3(0, dt, 0) * speed;
+        }
+        if (input.KeyHeld(Scancode.LeftShift))
+        {
+            Transform.LocalPosition -= new Vector3(0, dt, 0) * speed;
+        }
 
-        //if (Input.GetKey(Key.Left))
-        //{
-        //    angleX += dt * speedRot;
-        //}
-        //if (Input.GetKey(Key.Right))
-        //{
-        //    angleX -= dt * speedRot;
-        //}
-        //if (Input.GetKey(Key.Down))
-        //{
-        //    angleY -= dt * speedRot;
-        //}
-        //if (Input.GetKey(Key.Up))
-        //{
-        //    angleY += dt * speedRot;
-        //}
-        //if (Input.GetKey(Key.Return))
-        //{
-        //    GC.Collect();
-        //    GC.WaitForPendingFinalizers();
-        //}
+        if (input.KeyHeld(Scancode.LeftArrow))
+        {
+            angleX += dt * speedRot;
+        }
+        if (input.KeyHeld(Scancode.RightArrow))
+        {
+            angleX -= dt * speedRot;
+        }
+        if (input.KeyHeld(Scancode.DownArrow))
+        {
+            angleY -= dt * speedRot;
+        }
+        if (input.KeyHeld(Scancode.UpArrow))
+        {
+            angleY += dt * speedRot;
+        }
+        Console.WriteLine(input.MousePosition);
+
+        Console.WriteLine(input.MouseDelta);
+        if (input.KeyHeld(Scancode.Return))
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
         Transform.LocalRotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, angleX) * Quaternion.CreateFromAxisAngle(Vector3.UnitX, angleY);
     }
 }
