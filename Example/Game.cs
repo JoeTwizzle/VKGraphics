@@ -1,11 +1,6 @@
-﻿using BrickEngine.Example.VoxelRenderer.Standard;
-using OpenTK.Graphics;
+﻿using OpenTK.Graphics;
 using OpenTK.Platform;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Example.VolumeRenderer.Dynamic;
 
 namespace Example;
 internal sealed class Game : IDisposable

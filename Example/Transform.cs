@@ -1,301 +1,300 @@
 ﻿using System.Numerics;
 
-namespace BrickEngine.Example
+namespace Example;
+
+sealed class Transform
 {
-    sealed class Transform
+    #region Fields
+
+    #region Local
+    private Vector3 localPosition = new Vector3();
+    private Quaternion localRotation = Quaternion.Identity;
+    private Vector3 localScale = new Vector3(1, 1, 1);
+    private Transform? parent;
+    //private readonly List<Transform> children = new List<Transform>();
+
+    #endregion
+
+    #endregion
+
+    #region Properties
+
+    public Transform? Parent
     {
-        #region Fields
-
-        #region Local
-        private Vector3 localPosition = new Vector3();
-        private Quaternion localRotation = Quaternion.Identity;
-        private Vector3 localScale = new Vector3(1, 1, 1);
-        private Transform? parent;
-        //private readonly List<Transform> children = new List<Transform>();
-
-        #endregion
-
-        #endregion
-
-        #region Properties
-
-        public Transform? Parent
+        get => parent;
+        set
         {
-            get => parent;
-            set
+            parent = value;
+        }
+    }
+
+    //public static bool IsChildOf(Transform scr, Transform potentialChild)
+    //{
+    //    bool isChild = false;
+    //    for (int i = 0; i < scr.children.Count; i++)
+    //    {
+    //        isChild = scr.children[i] == potentialChild;
+
+    //        if (isChild)
+    //        {
+    //            break;
+    //        }
+    //    }
+    //    return isChild;
+    //}
+
+    //public static bool IsChildOfRecursive(Transform scr, Transform potentialChild)
+    //{
+    //    bool isChild = false;
+    //    for (int i = 0; i < scr.children.Count; i++)
+    //    {
+    //        isChild = scr.children[i] == potentialChild;
+    //        //Depth first search
+    //        if (!isChild)
+    //        {
+    //            isChild = IsChildOfRecursive(scr.children[i], potentialChild);
+    //        }
+    //        if (isChild)
+    //        {
+    //            break;
+    //        }
+    //    }
+    //    return isChild;
+    //}
+
+    //public IReadOnlyList<Transform> Children
+    //{
+    //    get { return children; }
+    //}
+
+    #region Local
+    public Vector3 LocalPosition
+    {
+        get => localPosition; set
+        {
+            localPosition = value;
+        }
+    }
+    public Quaternion LocalRotation
+    {
+        get => localRotation; set
+        {
+            localRotation = value;
+        }
+    }
+    public Vector3 LocalScale
+    {
+        get => localScale; set
+        {
+            localScale = value;
+        }
+    }
+    #endregion
+
+    #region World
+
+    public Vector3 Position
+    {
+        get
+        {
+            if (parent != null)
             {
-                parent = value;
+                return Vector3.Transform(LocalPosition, parent.WorldMatrix);
             }
+
+            return LocalPosition;
         }
 
-        //public static bool IsChildOf(Transform scr, Transform potentialChild)
-        //{
-        //    bool isChild = false;
-        //    for (int i = 0; i < scr.children.Count; i++)
-        //    {
-        //        isChild = scr.children[i] == potentialChild;
-
-        //        if (isChild)
-        //        {
-        //            break;
-        //        }
-        //    }
-        //    return isChild;
-        //}
-
-        //public static bool IsChildOfRecursive(Transform scr, Transform potentialChild)
-        //{
-        //    bool isChild = false;
-        //    for (int i = 0; i < scr.children.Count; i++)
-        //    {
-        //        isChild = scr.children[i] == potentialChild;
-        //        //Depth first search
-        //        if (!isChild)
-        //        {
-        //            isChild = IsChildOfRecursive(scr.children[i], potentialChild);
-        //        }
-        //        if (isChild)
-        //        {
-        //            break;
-        //        }
-        //    }
-        //    return isChild;
-        //}
-
-        //public IReadOnlyList<Transform> Children
-        //{
-        //    get { return children; }
-        //}
-
-        #region Local
-        public Vector3 LocalPosition
+        set
         {
-            get => localPosition; set
+            if (parent != null)
             {
-                localPosition = value;
+                Matrix4x4.Invert(parent.WorldMatrix, out var inverse);
+                LocalPosition = Vector3.Transform(value - parent.Position, inverse);
+            }
+            else
+            {
+                LocalPosition = value;
             }
         }
-        public Quaternion LocalRotation
+    }
+
+    public Quaternion Rotation
+    {
+        get
         {
-            get => localRotation; set
+            if (parent != null)
             {
-                localRotation = value;
+                return parent.Rotation * LocalRotation;
+            }
+            else
+            {
+                return LocalRotation;
             }
         }
-        public Vector3 LocalScale
+        set
         {
-            get => localScale; set
+            if (parent != null)
             {
-                localScale = value;
+                LocalRotation = Quaternion.Inverse(parent.Rotation) * value;
+            }
+            else
+            {
+                LocalRotation = value;
             }
         }
-        #endregion
+    }
 
-        #region World
-
-        public Vector3 Position
+    public Vector3 Scale
+    {
+        get
         {
-            get
+            if (parent != null)
             {
-                if (parent != null)
-                {
-                    return Vector3.Transform(LocalPosition, parent.WorldMatrix);
-                }
-
-                return LocalPosition;
+                return localScale * parent.Scale;
             }
-
-            set
-            {
-                if (parent != null)
-                {
-                    Matrix4x4.Invert(parent.WorldMatrix, out var inverse);
-                    LocalPosition = Vector3.Transform(value - parent.Position, inverse);
-                }
-                else
-                {
-                    LocalPosition = value;
-                }
-            }
+            return localScale;
         }
 
-        public Quaternion Rotation
+        set
         {
-            get
+            if (parent != null)
             {
-                if (parent != null)
-                {
-                    return parent.Rotation * LocalRotation;
-                }
-                else
-                {
-                    return LocalRotation;
-                }
+                LocalScale = new Vector3(
+                value.X / parent.Scale.X,
+                value.Y / parent.Scale.Y,
+                value.Z / parent.Scale.Z);
             }
-            set
+            else
             {
-                if (parent != null)
-                {
-                    LocalRotation = Quaternion.Inverse(parent.Rotation) * value;
-                }
-                else
-                {
-                    LocalRotation = value;
-                }
+                LocalScale = value;
             }
         }
+    }
+    #endregion
 
-        public Vector3 Scale
+    #endregion
+
+
+    #region Matrix
+    public Matrix4x4 LocalWorldMatrix
+    {
+        get
         {
-            get
-            {
-                if (parent != null)
-                {
-                    return localScale * parent.Scale;
-                }
-                return localScale;
-            }
-
-            set
-            {
-                if (parent != null)
-                {
-                    LocalScale = new Vector3(
-                    value.X / parent.Scale.X,
-                    value.Y / parent.Scale.Y,
-                    value.Z / parent.Scale.Z);
-                }
-                else
-                {
-                    LocalScale = value;
-                }
-            }
+            return Matrix4x4.CreateScale(LocalScale)
+                    * Matrix4x4.CreateFromQuaternion(LocalRotation)
+                    * Matrix4x4.CreateTranslation(LocalPosition);
         }
-        #endregion
-
-        #endregion
-
-
-        #region Matrix
-        public Matrix4x4 LocalWorldMatrix
+        set
         {
-            get
+            Matrix4x4.Decompose(value, out localScale, out localRotation, out localPosition);
+        }
+    }
+
+    public Matrix4x4 WorldMatrix
+    {
+        get
+        {
+            if (parent != null)
             {
-                return Matrix4x4.CreateScale(LocalScale)
-                        * Matrix4x4.CreateFromQuaternion(LocalRotation)
-                        * Matrix4x4.CreateTranslation(LocalPosition);
+                return LocalWorldMatrix * parent.WorldMatrix;
             }
-            set
+            return LocalWorldMatrix;
+        }
+        set
+        {
+            if (Matrix4x4.Decompose(value, out var scale, out var rotation, out var position))
             {
-                Matrix4x4.Decompose(value, out localScale, out localRotation, out localPosition);
+                Scale = scale;
+                Rotation = rotation;
+                Position = position;
             }
         }
+    }
 
-        public Matrix4x4 WorldMatrix
+    #endregion
+
+
+    #region Unit Axes
+
+    #region Local
+    public Vector3 LocalForward
+    {
+        get
         {
-            get
-            {
-                if (parent != null)
-                {
-                    return LocalWorldMatrix * parent.WorldMatrix;
-                }
-                return LocalWorldMatrix;
-            }
-            set
-            {
-                if (Matrix4x4.Decompose(value, out var scale, out var rotation, out var position))
-                {
-                    Scale = scale;
-                    Rotation = rotation;
-                    Position = position;
-                }
-            }
+            return Vector3.Transform(Vector3.UnitZ, LocalRotation);
         }
-
-        #endregion
-
-
-        #region Unit Axes
-
-        #region Local
-        public Vector3 LocalForward
+    }
+    public Vector3 LocalUp
+    {
+        get
         {
-            get
-            {
-                return Vector3.Transform(Vector3.UnitZ, LocalRotation);
-            }
+            return Vector3.Transform(Vector3.UnitY, LocalRotation);
         }
-        public Vector3 LocalUp
+    }
+    public Vector3 LocalRight
+    {
+        get
         {
-            get
-            {
-                return Vector3.Transform(Vector3.UnitY, LocalRotation);
-            }
+            return Vector3.Transform(Vector3.UnitX, LocalRotation);
         }
-        public Vector3 LocalRight
+    }
+
+
+    #endregion
+
+    #region World
+    public Vector3 Forward
+    {
+        get
         {
-            get
-            {
-                return Vector3.Transform(Vector3.UnitX, LocalRotation);
-            }
+            return Vector3.Transform(Vector3.UnitZ, Rotation);
         }
-
-
-        #endregion
-
-        #region World
-        public Vector3 Forward
+    }
+    public Vector3 Up
+    {
+        get
         {
-            get
-            {
-                return Vector3.Transform(Vector3.UnitZ, Rotation);
-            }
+            return Vector3.Transform(Vector3.UnitY, Rotation);
         }
-        public Vector3 Up
+    }
+
+    public Vector3 Right
+    {
+        get
         {
-            get
-            {
-                return Vector3.Transform(Vector3.UnitY, Rotation);
-            }
+            return Vector3.Transform(Vector3.UnitX, Rotation);
         }
+    }
 
-        public Vector3 Right
-        {
-            get
-            {
-                return Vector3.Transform(Vector3.UnitX, Rotation);
-            }
-        }
+    #endregion
 
-        #endregion
+    #endregion
 
-        #endregion
+    public static Transform Create()
+    {
+        return new Transform();
+    }
 
-        public static Transform Create()
-        {
-            return new Transform();
-        }
+    public static Transform Create(System.Numerics.Matrix4x4 matrix)
+    {
+        var t = new Transform();
+        t.WorldMatrix = matrix;
+        return t;
+    }
 
-        public static Transform Create(System.Numerics.Matrix4x4 matrix)
-        {
-            var t = new Transform();
-            t.WorldMatrix = matrix;
-            return t;
-        }
+    internal Transform Copy()
+    {
+        var t = new Transform();
+        t.WorldMatrix = WorldMatrix;
+        t.parent = parent;
+        return t;
+    }
 
-        internal Transform Copy()
-        {
-            var t = new Transform();
-            t.WorldMatrix = WorldMatrix;
-            t.parent = parent;
-            return t;
-        }
-
-        internal Transform CopyLocal()
-        {
-            var t = new Transform();
-            t.LocalWorldMatrix = LocalWorldMatrix;
-            return t;
-        }
+    internal Transform CopyLocal()
+    {
+        var t = new Transform();
+        t.LocalWorldMatrix = LocalWorldMatrix;
+        return t;
     }
 }

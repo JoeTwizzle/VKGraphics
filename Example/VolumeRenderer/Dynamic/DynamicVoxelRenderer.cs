@@ -1,12 +1,11 @@
 ﻿global using VKGraphics;
-using Example;
 using OpenTK.Mathematics;
 using OpenTK.Platform;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace BrickEngine.Example.VoxelRenderer.Standard
+namespace Example.VolumeRenderer.Dynamic
 {
     sealed class DynamicVoxelRenderer
     {
