@@ -1,6 +1,6 @@
 ﻿global using VKGraphics;
-using BrickEngine.Example.VolumeRenderer;
 using Example;
+using OpenTK.Mathematics;
 using OpenTK.Platform;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -8,9 +8,10 @@ using System.Runtime.InteropServices;
 
 namespace BrickEngine.Example.VoxelRenderer.Standard
 {
-    sealed class DynamicVoxelRenderer : IVolumeRenderer
+    sealed class DynamicVoxelRenderer
     {
-        readonly GameWindow window;
+        readonly Game game;
+        readonly WindowHandle window;
         readonly GraphicsDevice gd;
         readonly CommandList cl;
         const int pixelSize = 1;
@@ -21,7 +22,7 @@ namespace BrickEngine.Example.VoxelRenderer.Standard
         //Raytracing
         readonly Pipeline raytracePipeline;
         readonly ResourceLayout voxelLayout;
-        ResourceSet voxelSet;
+        readonly ResourceSet voxelSet;
 
         //Textures
         Texture mainTex;
@@ -81,16 +82,19 @@ namespace BrickEngine.Example.VoxelRenderer.Standard
         }
 
 
-        public unsafe DynamicVoxelRenderer(GameWindow game)
+        Vector2i framebufferSize;
+
+        public unsafe DynamicVoxelRenderer(Game game, WindowHandle window)
         {
             Camera = new();
-            this.window = game;
+            this.game = game;
+            this.window = window;
+            Toolkit.Window.GetFramebufferSize(window, out framebufferSize);
             gd = GraphicsDevice.CreateVulkan(new GraphicsDeviceOptions(true, null, false, ResourceBindingModel.Improved, true, false));
             ResourceFactory rf = gd.ResourceFactory;
-            swapchain = rf.CreateSwapchain(new SwapchainDescription(window.Window, (uint)800, 600, null, false));
-
+            swapchain = rf.CreateSwapchain(new SwapchainDescription(window, (uint)800, 600, null, false));
             //Create Camera buffer
-            Camera.AspectRatio = game.FramebufferSize.X / (float)game.FramebufferSize.Y;
+            Camera.AspectRatio = framebufferSize.X / (float)framebufferSize.Y;
             cameraBuffer = rf.CreateBuffer(new BufferDescription(GetUBOSize(Unsafe.SizeOf<CameraProperties>()), BufferUsage.UniformBuffer, 0));
             var p = Camera.ProjectionMatrix;
             Matrix4x4.Invert(p, out var pInv);
@@ -136,7 +140,7 @@ namespace BrickEngine.Example.VoxelRenderer.Standard
                   new ResourceLayoutElementDescription("_MainTexture", ResourceKind.TextureReadOnly, ShaderStages.Fragment))
                   );
 
-            CreateTextures(game, rf);
+            CreateTextures(framebufferSize, rf);
 
             var fsTriShaderSet = new ShaderSetDescription(null, [vertShader, fragShader]);
             displayPipline = rf.CreateGraphicsPipeline(new GraphicsPipelineDescription(BlendStateDescription.SingleOverrideBlend,
@@ -160,53 +164,42 @@ namespace BrickEngine.Example.VoxelRenderer.Standard
             }
         }
 
-        private void CreateTextures(GameWindow window, ResourceFactory rf)
+        private void CreateTextures(Vector2i fbSize, ResourceFactory rf)
         {
-            mainTex = rf.CreateTexture(new TextureDescription((uint)window.FramebufferSize.X / pixelSize, (uint)window.FramebufferSize.Y / pixelSize, 1, 1, 1, PixelFormat.R16G16B16A16Float, TextureUsage.Sampled | TextureUsage.Storage, TextureType.Texture2D));
-            //depthTex = rf.CreateTexture(new TextureDescription((uint)window.Window.Width, (uint)window.Window.Height, 1, 1, 1, PixelFormat.R32_Float, TextureUsage.Sampled | TextureUsage.Storage, TextureType.Texture2D));
+            mainTex = rf.CreateTexture(new TextureDescription((uint)fbSize.X / pixelSize, (uint)fbSize.Y / pixelSize, 1, 1, 1, PixelFormat.R16G16B16A16Float, TextureUsage.Sampled | TextureUsage.Storage, TextureType.Texture2D));
             renderSet = rf.CreateResourceSet(new ResourceSetDescription(renderBufferLayout, mainTex));
             displaySet = rf.CreateResourceSet(new ResourceSetDescription(displayBufferLayout, gd.PointSampler, mainTex));
         }
 
-        public void Resize()
+        private void Resize()
         {
-            Camera.AspectRatio = window.FramebufferSize.X / (float)window.FramebufferSize.Y;
-            //window.GraphicsContext.DisposeNextFrame(renderSet);
-            //window.GraphicsContext.DisposeNextFrame(displaySet);
-            //window.GraphicsContext.DisposeNextFrame(mainTex);
-            //window.GraphicsContext.DisposeNextFrame(depthTex);
-            swapchain.Resize((uint)window.FramebufferSize.X, (uint)window.FramebufferSize.Y);
-            CreateTextures(window, gd.ResourceFactory);
-            Update();
-            Render();
+            Camera.AspectRatio = framebufferSize.X / (float)framebufferSize.Y;
+            swapchain.Resize((uint)framebufferSize.X, (uint)framebufferSize.Y);
+            CreateTextures(framebufferSize, gd.ResourceFactory);
         }
 
         public void Update()
         {
-            Camera.Update(window.DeltaTime);
-            //if (window.Input.GetKeyDown(Key.K))
-            //{
-            //    Console.WriteLine(Camera.Transform.Position);
-            //}
+            Camera.Update(game.DeltaTime);
+            Toolkit.Window.GetFramebufferSize(window, out var newFramebufferSize);
+
+            if ((framebufferSize != newFramebufferSize))
+            {
+                framebufferSize = newFramebufferSize;
+                Resize();
+            }
 
             var p = Camera.PerspectiveMatrix;
             Matrix4x4.Invert(p, out var pInv);
 
             cl.Begin();
             cl.UpdateBuffer(cameraBuffer, 0, new CameraProperties(Camera.Transform.WorldMatrix, pInv));
-            cl.End();
-            gd.SubmitCommands(cl);
-        }
-
-        public void Render()
-        {
-            cl.Begin();
             cl.SetPipeline(raytracePipeline);
             cl.SetComputeResourceSet(0, cameraSet);
             cl.SetComputeResourceSet(1, voxelSet);
             cl.SetComputeResourceSet(2, renderSet);
-            uint worksizeX = BitOperations.RoundUpToPowerOf2((uint)window.FramebufferSize.X) / pixelSize;
-            uint worksizeY = BitOperations.RoundUpToPowerOf2((uint)window.FramebufferSize.Y) / pixelSize;
+            uint worksizeX = BitOperations.RoundUpToPowerOf2((uint)framebufferSize.X) / pixelSize;
+            uint worksizeY = BitOperations.RoundUpToPowerOf2((uint)framebufferSize.Y) / pixelSize;
             cl.Dispatch(worksizeX / 8, worksizeY / 8, 1);
             cl.SetPipeline(displayPipline);
             cl.SetGraphicsResourceSet(0, displaySet);
