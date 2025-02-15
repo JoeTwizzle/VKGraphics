@@ -55,10 +55,11 @@ internal class WindowHandler
         Toolkit.Window.SetClientSize(window, new(800, 600));
         Toolkit.Window.SetBorderStyle(window, WindowBorderStyle.ResizableBorder);
         Toolkit.Window.SetMode(window, WindowMode.Normal);
-        if (Toolkit.Mouse.SupportsRawMouseMotion)
-        {
-            Toolkit.Mouse.EnableRawMouseMotion(window, true);
-        }
+        //TODO: IDK Why this is broken
+        //if (Toolkit.Mouse.SupportsRawMouseMotion)
+        //{
+        //    Toolkit.Mouse.EnableRawMouseMotion(window, true);
+        //}
         var eventQueue = EventQueue.Subscribe(window);
         int handle;
         if (_recycledHandles.Count > 0)

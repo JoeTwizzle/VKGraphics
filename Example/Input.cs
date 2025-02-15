@@ -72,6 +72,7 @@ public sealed class Input
         {
             if (WindowHandle != null)
             {
+                Toolkit.Window.SetCursorCaptureMode(WindowHandle, value);
                 if (value == CursorCaptureMode.Locked)
                 {
                     Toolkit.Window.SetCursor(WindowHandle, null);
@@ -80,8 +81,6 @@ public sealed class Input
                 {
                     Toolkit.Window.SetCursor(WindowHandle, Toolkit.Cursor.Create(SystemCursorType.Default));
                 }
-
-                Toolkit.Window.SetCursorCaptureMode(WindowHandle, value);
             }
         }
     }
@@ -105,6 +104,7 @@ public sealed class Input
         {
             const float rawMouseMotionScale = 1.0f / 65536.0f;
             MouseDelta += rawMouseMoveEvent.Delta * rawMouseMotionScale;
+            Console.WriteLine(rawMouseMoveEvent.Delta);
         }
         else if (args is MouseMoveEventArgs mouseMoveEventArgs)
         {
@@ -115,7 +115,7 @@ public sealed class Input
 
             MousePosition = mouseMoveEventArgs.ClientPosition;
             Toolkit.Window.ClientToScreen(mouseMoveEventArgs.Window, mouseMoveEventArgs.ClientPosition, out var gPos);
-            GlobalMousePosition = gPos;
+            _globalMousePosition = gPos;
         }
         else if (args is MouseButtonDownEventArgs mouseButtonDownEventArgs)
         {

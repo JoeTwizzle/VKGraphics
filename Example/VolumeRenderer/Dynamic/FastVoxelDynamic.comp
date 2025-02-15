@@ -219,7 +219,7 @@ vec3 getColorAtRay(Ray ray, out uvec4 result)
         
         Ray shadowRay = Ray(vec3(position + normal), dirToSun);
         uvec4 shadowResult = traceRay(shadowRay);
-        const vec3 surfaceColor = vec3(0.3, 0.8, 0.1) * sRGBtoAP1;
+        const vec3 surfaceColor = vec3(0.3, 0.8, 0.1) * sRGBtoAP1 * ((1024 - shadowRay.origin.y) / 1024.0);
         
         float brightness = shadowResult.w == -1 ? 1.0 : 0.5;
 
@@ -230,6 +230,10 @@ vec3 getColorAtRay(Ray ray, out uvec4 result)
     else
     {
         color = ambientLight;
+        if(dot(ray.direction,dirToSun)>0.98)
+        {
+            color = vec3(1, 1, 0.8) * 10;
+        }
     }
     return color;
 }

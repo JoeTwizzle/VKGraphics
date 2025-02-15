@@ -112,17 +112,17 @@ sealed class Camera
 
     float angleX, angleY;
     private Transform parent = Transform.Create();
-    bool rotate = true;
+    bool freeMouse = true;
     float rotation = 0f;
     const float rotationSpeed = 360f / 10f;
     public void Update(Input input, float dt)
     {
         float speedRot = 3.4f;
-        float speed = 32f;
-        if (input.KeyPressed(Scancode.P))
+        float speed = 100;
+        if (input.KeyPressed(Scancode.Escape))
         {
-            rotate = !rotate;
-            if (rotate)
+            freeMouse = !freeMouse;
+            if (freeMouse)
             {
                 input.CursorCaptureMode = CursorCaptureMode.Normal;
             }
@@ -131,20 +131,20 @@ sealed class Camera
                 input.CursorCaptureMode = CursorCaptureMode.Locked;
             }
         }
-        if (rotate)
+        if (!freeMouse)
         {
-            rotation += rotationSpeed * dt;
-            rotation %= 360f;
-            parent.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, ToRadians * rotation);
+            angleX += dt * input.MouseDelta.X;
+            angleY += dt * input.MouseDelta.Y;
         }
         else
         {
-            angleX -= dt * input.MouseDelta.X;
-            angleY -= dt * input.MouseDelta.Y;
+            //rotation += rotationSpeed * dt;
+            //rotation %= 360f;
+            //parent.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, ToRadians * rotation);
         }
         if (input.KeyHeld(Scancode.LeftControl))
         {
-            speed = 100f;
+            speed = 200f;
         }
         var fwd = Transform.LocalForward;
         fwd = Vector3.Normalize(new Vector3(fwd.X, 0, fwd.Z));
@@ -189,9 +189,8 @@ sealed class Camera
         {
             angleY += dt * speedRot;
         }
-        Console.WriteLine(input.MousePosition);
-
-        Console.WriteLine(input.MouseDelta);
+        //if (input.MouseDelta != OpenTK.Mathematics.Vector2.Zero)
+        //Console.WriteLine(input.MouseDelta);
         if (input.KeyHeld(Scancode.Return))
         {
             GC.Collect();
