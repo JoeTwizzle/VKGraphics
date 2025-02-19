@@ -6,23 +6,23 @@ namespace VKGraphics;
 /// Describes a <see cref="DeviceBuffer"/>, used in the creation of <see cref="DeviceBuffer"/> objects by a
 /// <see cref="ResourceFactory"/>.
 /// </summary>
-public struct BufferDescription : IEquatable<BufferDescription>
+public readonly struct BufferDescription : IEquatable<BufferDescription>
 {
     /// <summary>
     /// The desired capacity, in bytes, of the <see cref="DeviceBuffer"/>.
     /// </summary>
-    public uint SizeInBytes;
+    public readonly uint SizeInBytes;
 
     /// <summary>
     /// Indicates how the <see cref="DeviceBuffer"/> will be used.
     /// </summary>
-    public BufferUsage Usage;
+    public readonly BufferUsage Usage;
 
     /// <summary>
     /// For structured buffers, this value indicates the size in bytes of a single structure element, and must be non-zero.
     /// For all other buffer types, this value must be zero.
     /// </summary>
-    public uint StructureByteStride;
+    public readonly uint StructureByteStride;
 
     /// <summary>
     /// Indicates that this is a raw buffer. This should be combined with
@@ -31,12 +31,12 @@ public struct BufferDescription : IEquatable<BufferDescription>
     /// <remarks>
     /// This affects how the buffer is bound in the D3D11 backend.
     /// </remarks>
-    public bool RawBuffer;
+    public readonly bool RawBuffer;
 
     /// <summary>
     /// Optional source of data to fill the buffer with.
     /// </summary>
-    public IntPtr InitialData;
+    public readonly IntPtr InitialData;
 
     /// <summary>
     /// Constructs a new <see cref="BufferDescription"/> describing a non-dynamic <see cref="DeviceBuffer"/>.

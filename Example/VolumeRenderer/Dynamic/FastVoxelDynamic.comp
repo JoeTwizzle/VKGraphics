@@ -68,8 +68,12 @@ Ray CreateCameraRay(vec2 rayCoords)
     // Invert the perspective projection of the view-space position
     vec3 direction = (_CameraProperites._CameraInverseProjection * vec4(rayCoords, 0.0, 1.0)).xyz;
 
-    // Transform the direction from camera to world space and normalize
+    // Transform the direction from camera to world space
     direction = normalize((_CameraProperites._CameraToWorld * vec4(direction, 0.0)).xyz);
+
+    // Avoid divide by zero when rayDir element is zero
+//    if (any(equal(direction, vec3(0.0)))) 
+//        direction += vec3(equal(direction, vec3(0.0))) * vec3(0.00001);
     return CreateRay(origin, direction);
 }
 
@@ -126,80 +130,88 @@ vec3 stepMask(vec3 sideDist)
 bvec3 andBVec(bvec3 n, bvec3 m) {
     return bvec3(n.x && m.x, n.y && m.y, n.z && m.z);
 }
-
+vec3 normies(uint side, vec3 rayDir)
+{
+    return (vec3(side==0., side==1., side==2.) * sign(-rayDir));
+}
 const uint chunksPerAxis = (1024 / 4);
 const vec3 dirToSun = normalize(vec3(0.4, 0.5, 0.45));
-uvec4 traceRay(Ray ray)
+vec4 traceRay(Ray ray)
 {
-    const vec3 inv_dir = 1.0 / (ray.direction);
-    uvec3 gridPos = uvec3(ivec3(ray.origin));
-
-    if (any(equal(ray.direction, vec3(0.0)))) // Avoid divide by zero when rayDir element is zero
-        ray.direction += vec3(equal(ray.direction, vec3(0.0))) * vec3(0.00001);
-
-    const vec3 rayStepF = sign(ray.direction);
-    const ivec3 rayStep = ivec3(rayStepF);   
-    const vec3 deltaDist = abs(vec3(length(ray.direction)) / ray.direction);
-    vec3 sideDist = (rayStepF * (vec3(gridPos) - ray.origin) + (rayStepF * 0.5) + 0.5) * deltaDist;
-
     uint faceId = -1;
-    bool exit = false;
-    vec3 prevMask = step(sideDist.xyz, min(sideDist.yzx, sideDist.zxy));
-    for (int i = 0; !exit && i < 512; i++) 
+
+    ivec3 gridPos = ivec3(ray.origin);
+
+     // S is rayDir non-negative? 0 / 1
+    vec3 S = step(0, ray.direction);
+
+    vec3 stepDir = sign(ray.direction);
+
+    vec3 deltaDist = 1.0/abs(ray.direction);
+
+    vec3 sideDist = (S-stepDir * fract(ray.origin)) * deltaDist;
+
+    // same as vec4(sideDist.xxyy <= sideDist.yzzx);
+    vec4 conds = step(sideDist.xxyy, sideDist.yzzx); 
+
+    for (int i = 0; i < 512; i++) 
     {
-        float densityValue = 0;
-        if(any(lessThanEqual(uvec3(1024), gridPos))) { break; }
-        if(any(lessThan(gridPos, uvec3(0)))) { break; }
+        if(any(lessThanEqual(vec3(1024), gridPos))) { break; }
+        if(any(lessThan(gridPos, vec3(0)))) { break; }
 
         uvec3 chunkPos = (gridPos >> 2);
         uint chunkIndex = chunkPos.z * chunksPerAxis * chunksPerAxis + chunkPos.y * chunksPerAxis + chunkPos.x;
-        //    const uint xMask = 0x24924924;
-        //    const uint yMask = 0x92492492;
-        //    const uint zMask = 0x49249249;
-        uint64_t chunk = _VoxelData.Values[chunkIndex];
-        
-        do
-        {            
-            vec3 mask = step(sideDist.xyz, min(sideDist.yzx, sideDist.zxy));
-//            if(all(equal(mask, vec3(0))))
-//            {
-//                mask.z = 1.0;
-//            }
 
+        uint64_t chunk = _VoxelData.Values[chunkIndex];
+
+//        if(chunk != 0ul)
+//        {
+//            conds = step(sideDist.xxyy, sideDist.yzzx); 
+//            vec3 cases;
+//            cases.x = conds.x * conds.y;                 // if       x dir
+//            cases.y = (1.0-cases.x) * conds.z * conds.w;  // else if  y dir
+//            cases.z = (1.0-cases.x) * (1.0-cases.y);       // else     z dir
+//            sideDist += max((2.0*cases-1.0) * deltaDist, 0.0);
+//            gridPos += ivec3(cases * stepDir);
+//        }
+        do
+        {  
             if(chunk != 0ul)
             {
                 uvec3 localGridPos = gridPos & 3;
-                uvec3 uMask = uvec3(prevMask);
-
-
-
-                //TODO: implement masking of potential steps
-
                 uint chunkTest = localGridPos.z * 4 * 4 + localGridPos.y * 4 + localGridPos.x;
                 uint64_t testPos = 1ul << chunkTest;
                 if((chunk & testPos) != 0ul)
                 {
-                    
-//                    uint negative = uint(any(andBVec(bvec3(prevMask), lessThan(ray.direction, vec3(0)))));
-                    uint negative = uint(
-                        any(
-                            bvec3(uMask & uvec3(
-                                lessThan(ray.direction, vec3(0))
-                            ))
-                        )
-                    );
-                    faceId = (uMask.y * 2) + (uMask.z * 4) + negative;                    
-                    return uvec4(gridPos, faceId);
+                    vec3 cases;
+                    cases.x = conds.x * conds.y;                 // if       x dir
+                    cases.y = (1.0-cases.x) * conds.z * conds.w;  // else if  y dir
+                    cases.z = (1.0-cases.x) * (1.0-cases.y);       // else     z dir
+                    sideDist += max((2.*cases-1.) * deltaDist, 0.0);
+                    vec3 p = gridPos + .5 - stepDir*.5; // Point on axis plane
+                    float result = cases.y + 2. * cases.z;
+                    vec3 n = normies(uint(result), ray.direction);
+                    // Solve ray plane intersection equation: dot(n, ro + t * rd - p) = 0.
+                    // for t :
+                    float t = (dot(n, p - ray.origin)) / dot(n, ray.direction);
+                    vec3 hit = ray.origin + ray.direction * t;
+                    return vec4(hit, cases.y + 2. * cases.z);
                 }
-            }
-            sideDist += mask * deltaDist;            
-            gridPos += ivec3(mask) * rayStep;
-            prevMask = mask;
-            
-        } while(!exit && (gridPos >> 2) == chunkPos);
+            }   
+            conds = step(sideDist.xxyy, sideDist.yzzx); 
+            vec3 cases;
+            cases.x = conds.x * conds.y;                 // if       x dir
+            cases.y = (1.0-cases.x) * conds.z * conds.w;  // else if  y dir
+            cases.z = (1.0-cases.x) * (1.0-cases.y);       // else     z dir
+            sideDist += max((2.0*cases-1.0) * deltaDist, 0.0);
+            gridPos += ivec3(cases * stepDir);
+        } while((gridPos >> 2) == chunkPos);
     }
-    return uvec4(gridPos, -1);
+
+    return vec4(gridPos, -1);
 }
+
+
 const mat3 sRGBtoAP1 = mat3
 (
 	0.613097, 0.339523, 0.047379,
@@ -207,32 +219,36 @@ const mat3 sRGBtoAP1 = mat3
 	0.020616, 0.109570, 0.869815
 );
 
-vec3 getColorAtRay(Ray ray, out uvec4 result)
+vec3 getColorAtRay(Ray ray, out vec4 result)
 {
-    const vec3 ambientLight = vec3(0.3, 0.3, 0.8) * 4 * sRGBtoAP1;
+    const vec3 skyColor = vec3(0.3, 0.3, 0.8);
     result = traceRay(ray);
     vec3 color = vec3(0);
     if(result.w != -1)
     {
-        uvec3 position = result.xyz;
-        ivec3 normal = NORMALS[result.w];
+        vec3 position = result.xyz;
+        vec3 normal = normies(uint(result.w), ray.direction);
         
         Ray shadowRay = Ray(vec3(position + normal), dirToSun);
-        uvec4 shadowResult = traceRay(shadowRay);
-        const vec3 surfaceColor = vec3(0.3, 0.8, 0.1) * sRGBtoAP1 * ((1024 - shadowRay.origin.y) / 1024.0);
+        vec4 shadowResult = traceRay(shadowRay);
+        const vec3 directLight = vec3(0.3, 0.9, 0.1);
         
-        float brightness = shadowResult.w == -1 ? 1.0 : 0.5;
+        float brightness = shadowResult.w == -1 ? 1 : 0.2;
 
         float factor = saturate(dot(vec3(normal), dirToSun) * 0.5 + 1);
 
-        color = surfaceColor * ambientLight * brightness * factor;
+        color = directLight * brightness;
+//color = normal;
     }
     else
     {
-        color = ambientLight;
-        if(dot(ray.direction,dirToSun)>0.98)
+        if(dot(normalize(ray.direction), dirToSun) > 0.99)
         {
-            color = vec3(1, 1, 0.8) * 10;
+            color = vec3(1, 1, 0.8) * 3;
+        }
+        else
+        {
+            color = skyColor;
         }
     }
     return color;
@@ -255,25 +271,24 @@ void main()
     vec2 rayCoords = uv * 2.0 - 1.0;
 
     Ray ray = CreateCameraRay(rayCoords);
-    if (any(equal(ray.direction, vec3(0.0)))) // Avoid divide by zero when rayDir element is zero
-        ray.direction += vec3(equal(ray.direction, vec3(0.0))) * vec3(0.00001);
 
-    uvec4 hitResult;
-    vec3 color = getColorAtRay(ray, hitResult);
 
-    const float reflectivity = 0.03;
-    float attenuation = 1.0;
-    for(int i = 0; i < 1; i++)
+    vec4 hitResult;
+    vec3 color;
+    color = getColorAtRay(ray, hitResult);
+    if(hitResult.w != -1)
     {
+        vec3 normal = normies(uint(hitResult.w), ray.direction);
+//        color = sign(ray.direction);
+//        color = normal;
+        ray = Ray(hitResult.xyz + normal, normalize(vec3(reflect(ray.direction, normalize(normal)))));
+        color += getColorAtRay(ray, hitResult);
         if(hitResult.w != -1)
         {
-            attenuation *= reflectivity;
-            ivec3 normal = getNormal(hitResult.w);
-            ray = Ray(hitResult.xyz + normal, reflect(ray.direction,vec3(normal)));
-
-            color += getColorAtRay(ray, hitResult) * attenuation;
+            ray = Ray(hitResult.xyz + normal, normalize(vec3(reflect(ray.direction, normalize(normal)))));
+            color += getColorAtRay(ray, hitResult);
         }
     }
-
+//    color /= 3;
     imageStore(screen, pixelPos, vec4(color, 1.0));
 }

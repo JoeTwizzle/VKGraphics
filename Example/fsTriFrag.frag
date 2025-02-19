@@ -4,7 +4,7 @@ layout(set = 0, binding = 0) uniform sampler _MainSampler;
 layout(set = 0, binding = 1) uniform texture2D _MainTexture;
 layout(location = 0) out vec4 color;
 
-float Tonemap_ACES(float x)
+vec3 Tonemap_ACES(vec3 x)
 {
     // Narkowicz 2015, "ACES Filmic Tone Mapping Curve"
     const float a = 2.51;
@@ -64,7 +64,7 @@ vec3 Tonemap_ACESFitted2(vec3 acescg)
 void main()
 {
     vec3 rawColor = texture(sampler2D(_MainTexture, _MainSampler), texCoord).rgb;
-    color = vec4(Tonemap_ACESFitted2(rawColor), 1.0);
+    color = vec4(Tonemap_ACES(rawColor), 1.0);
     //color = vec4(Tonemap_ACES(rawColor.x),Tonemap_ACES(rawColor.y),Tonemap_ACES(rawColor.z), 1.0);
     //color = vec4(rawColor, 1.0);
 }
