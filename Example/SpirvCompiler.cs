@@ -1,4 +1,4 @@
-﻿using OpenTK.Platform;
+using OpenTK.Platform;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -10,14 +10,21 @@ using System.Threading.Tasks;
 namespace Example;
 internal static class SpirvCompiler
 {
-    public static byte[] GetSpirvBytes(string glslFile)
+    public static byte[] GetSpirvBytes(string shaderSourceFile)
     {
-        glslFile = Path.GetFullPath(glslFile);
-        var outputFile = Path.ChangeExtension(glslFile, ".spv");
-        if (!File.Exists(outputFile) || File.GetLastWriteTime(glslFile) > File.GetLastWriteTime(outputFile))
+        shaderSourceFile = Path.GetFullPath(shaderSourceFile);
+        var outputFile = Path.ChangeExtension(shaderSourceFile, ".spv");
+        if (!File.Exists(outputFile) || File.GetLastWriteTime(shaderSourceFile) > File.GetLastWriteTime(outputFile))
         {
-            Console.WriteLine("XD");
-            if (!CompileGlslToSpirv(glslFile))
+            Console.WriteLine($"Recompiling shader {shaderSourceFile}");
+            if (shaderSourceFile.EndsWith(".slang"))
+            {
+                if (!CompileSlangToSpirv(shaderSourceFile))
+                {
+                    throw new InvalidOperationException("Error compiling spirv shader");
+                }
+            }
+            else if (!CompileGlslToSpirv(shaderSourceFile))
             {
                 throw new InvalidOperationException("Error compiling spirv shader");
             }
@@ -45,10 +52,60 @@ internal static class SpirvCompiler
         };
 
         using Process process = new() { StartInfo = psi };
+        process.ErrorDataReceived += (o, e) =>
+        {
+            var prevColor = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"{e.Data}");
+            Console.ForegroundColor = prevColor;
+        };
+        process.OutputDataReceived += (o, e) =>
+        {
+            Console.WriteLine($"{e.Data}");
+        };
         process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
         process.WaitForExit();
-        string output = process.StandardOutput.ReadToEnd();
-        string error = process.StandardError.ReadToEnd();
+
+        return process.ExitCode == 0;
+    }
+    public static bool CompileSlangToSpirv(string slangFile)
+    {
+        slangFile = Path.GetFullPath(slangFile);
+        var outputFile = Path.ChangeExtension(slangFile, ".spv");
+
+        string args = $"{slangFile} ";
+#if DEBUG
+        args += "-g3 -O0";
+#endif
+        args += $" -o {outputFile}";
+        ProcessStartInfo psi = new()
+        {
+            FileName = "slangc.exe",
+            Arguments = args,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using Process process = new() { StartInfo = psi };
+        process.ErrorDataReceived += (o, e) =>
+        {
+            var prevColor = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"{e.Data}");
+            Console.ForegroundColor = prevColor;
+        };
+        process.OutputDataReceived += (o, e) =>
+        {
+            Console.WriteLine($"{e.Data}");
+        };
+        process.Start();
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+        process.WaitForExit();
 
         return process.ExitCode == 0;
     }

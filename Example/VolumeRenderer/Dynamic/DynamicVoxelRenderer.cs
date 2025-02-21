@@ -1,4 +1,4 @@
-﻿global using VKGraphics;
+global using VKGraphics;
 using OpenTK.Mathematics;
 using OpenTK.Platform;
 using System.Numerics;
@@ -122,7 +122,7 @@ sealed class DynamicVoxelRenderer
                 ));
 
             //Create shader
-            var shaderResult = SpirvCompiler.GetSpirvBytes("VolumeRenderer/Dynamic/FastVoxelDynamic.comp");
+            var shaderResult = SpirvCompiler.GetSpirvBytes("VolumeRenderer/Dynamic/FastVoxelDynamic.slang");
             var shader = rf.CreateShader(new ShaderDescription(ShaderStages.Compute, shaderResult, "main", true));
 
             //Create Pipeline
