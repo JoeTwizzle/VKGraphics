@@ -66,5 +66,5 @@ void main()
     vec3 rawColor = texture(sampler2D(_MainTexture, _MainSampler), texCoord).rgb;
     color = vec4(Tonemap_ACES(rawColor), 1.0);
     //color = vec4(Tonemap_ACES(rawColor.x),Tonemap_ACES(rawColor.y),Tonemap_ACES(rawColor.z), 1.0);
-    //color = vec4(rawColor, 1.0);
+//    color = vec4(rawColor, 1.0);
 }

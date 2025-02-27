@@ -1,4 +1,4 @@
-﻿using OpenTK.Platform;
+using OpenTK.Platform;
 using System.Numerics;
 namespace Example;
 
@@ -118,7 +118,7 @@ sealed class Camera
     public void Update(Input input, float dt)
     {
         float speedRot = 3.4f;
-        float speed = 100;
+        float speed = 30;
         if (input.KeyPressed(Scancode.Escape))
         {
             freeMouse = !freeMouse;
@@ -133,8 +133,8 @@ sealed class Camera
         }
         if (!freeMouse)
         {
-            angleX += dt * input.MouseDelta.X;
-            angleY += dt * input.MouseDelta.Y;
+            angleX += input.MouseDelta.X * 0.001f;
+            angleY += input.MouseDelta.Y * 0.001f;
         }
         else
         {
@@ -144,7 +144,7 @@ sealed class Camera
         }
         if (input.KeyHeld(Scancode.LeftControl))
         {
-            speed = 200f;
+            speed = 150f;
         }
         var fwd = Transform.LocalForward;
         fwd = Vector3.Normalize(new Vector3(fwd.X, 0, fwd.Z));

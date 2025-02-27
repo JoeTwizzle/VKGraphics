@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
@@ -202,7 +202,7 @@ internal unsafe partial class VulkanGraphicsDevice
 #if DEBUG
             if ((flags & VkDebugReportFlagBitsEXT.DebugReportErrorBitExt) != 0)
             {
-                if (Debugger.IsAttached)
+                if (Debugger.IsAttached && !message.Contains("SPIR-V module not valid"))
                 {
                     Debugger.Break();
                 }

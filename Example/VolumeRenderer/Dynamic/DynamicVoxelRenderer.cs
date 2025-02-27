@@ -13,7 +13,7 @@ sealed class DynamicVoxelRenderer
     readonly WindowHandle window;
     readonly GraphicsDevice gd;
     readonly CommandList cl;
-    const int pixelSize = 2;
+    const float pixelSize = 1f;
     //camera
     readonly DeviceBuffer cameraBuffer;
     readonly ResourceSet cameraSet;
@@ -96,6 +96,7 @@ sealed class DynamicVoxelRenderer
         {
             //Create and populate Camera buffer
             Toolkit.Window.GetFramebufferSize(window, out framebufferSize);
+            framebufferSize = Vector2i.ComponentMax(framebufferSize, (1, 1));
             Camera.AspectRatio = framebufferSize.X / (float)framebufferSize.Y;
             cameraBuffer = rf.CreateBuffer(new BufferDescription(
                 GetUBOSize(Unsafe.SizeOf<CameraProperties>()), BufferUsage.UniformBuffer, 0));
@@ -143,10 +144,10 @@ sealed class DynamicVoxelRenderer
                   new ResourceLayoutElementDescription("_MainTexture", ResourceKind.TextureReadOnly, ShaderStages.Fragment))
             );
 
-            mainTex = rf.CreateTexture(new TextureDescription((uint)framebufferSize.X / pixelSize, (uint)framebufferSize.Y / pixelSize,
+            mainTex = rf.CreateTexture(new TextureDescription((uint)(framebufferSize.X / pixelSize), (uint)(framebufferSize.Y / pixelSize),
                 1, 1, 1, PixelFormat.R16G16B16A16Float, TextureUsage.Sampled | TextureUsage.Storage, TextureType.Texture2D));
             renderSet = rf.CreateResourceSet(new ResourceSetDescription(renderBufferLayout, mainTex));
-            displaySet = rf.CreateResourceSet(new ResourceSetDescription(displayBufferLayout, gd.PointSampler, mainTex));
+            displaySet = rf.CreateResourceSet(new ResourceSetDescription(displayBufferLayout, gd.LinearSampler, mainTex));
 
             var fsTriShaderSet = new ShaderSetDescription(null, [vertShader, fragShader]);
             displayPipline = rf.CreateGraphicsPipeline(new GraphicsPipelineDescription(BlendStateDescription.SingleOverrideBlend,
@@ -173,7 +174,7 @@ sealed class DynamicVoxelRenderer
 
     private void CreateTextures(Vector2i fbSize, ResourceFactory rf)
     {
-        mainTex = rf.CreateTexture(new TextureDescription((uint)fbSize.X / pixelSize, (uint)fbSize.Y / pixelSize, 1, 1, 1, PixelFormat.R16G16B16A16Float, TextureUsage.Sampled | TextureUsage.Storage, TextureType.Texture2D));
+        mainTex = rf.CreateTexture(new TextureDescription((uint)(fbSize.X / pixelSize), (uint)(fbSize.Y / pixelSize), 1, 1, 1, PixelFormat.R16G16B16A16Float, TextureUsage.Sampled | TextureUsage.Storage, TextureType.Texture2D));
         renderSet = rf.CreateResourceSet(new ResourceSetDescription(renderBufferLayout, mainTex));
         displaySet = rf.CreateResourceSet(new ResourceSetDescription(displayBufferLayout, gd.PointSampler, mainTex));
     }
@@ -196,16 +197,18 @@ sealed class DynamicVoxelRenderer
 
     public void Update()
     {
-        Camera.Update(game.Input, game.DeltaTime);
-        Toolkit.Window.GetFramebufferSize(window, out var newFramebufferSize);
-
-        if ((framebufferSize != newFramebufferSize))
+        if (Toolkit.Window.GetMode(window) != WindowMode.Minimized)
         {
-            framebufferSize = newFramebufferSize;
-            Resize();
-        }
+            Camera.Update(game.Input, game.DeltaTime);
+            Toolkit.Window.GetFramebufferSize(window, out var newFramebufferSize);
 
-        Render();
+            if ((framebufferSize != newFramebufferSize) && (newFramebufferSize.X != 0 || newFramebufferSize.Y != 0))
+            {
+                framebufferSize = newFramebufferSize;
+                Resize();
+            }
+            Render();
+        }
     }
 
     private void Render()
@@ -218,8 +221,8 @@ sealed class DynamicVoxelRenderer
         cl.SetComputeResourceSet(0, cameraSet);
         cl.SetComputeResourceSet(1, voxelSet);
         cl.SetComputeResourceSet(2, renderSet);
-        uint worksizeX = BitOperations.RoundUpToPowerOf2((uint)framebufferSize.X) / pixelSize;
-        uint worksizeY = BitOperations.RoundUpToPowerOf2((uint)framebufferSize.Y) / pixelSize;
+        uint worksizeX = (uint)(BitOperations.RoundUpToPowerOf2((uint)framebufferSize.X) / pixelSize);
+        uint worksizeY = (uint)(BitOperations.RoundUpToPowerOf2((uint)framebufferSize.Y) / pixelSize);
         cl.Dispatch(worksizeX / 8, worksizeY / 8, 1);
         cl.SetPipeline(displayPipline);
         cl.SetGraphicsResourceSet(0, displaySet);
