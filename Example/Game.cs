@@ -1,16 +1,16 @@
-﻿using OpenTK.Graphics;
+using OpenTK.Graphics;
 using OpenTK.Platform;
 using Example.VolumeRenderer.Dynamic;
 
 namespace Example;
 internal sealed class Game : IDisposable
 {
-    private Metrics _metrics;
-    private GameLoop _gameLoop;
-    private WindowHandler _windowHandler;
-    private OpenWindowHandle _mainWindowHandle;
-    private WindowInfo _mainWindowInfo;
-    private DynamicVoxelRenderer _renderer;
+    private readonly Metrics _metrics;
+    private readonly GameLoop _gameLoop;
+    private readonly WindowHandler _windowHandler;
+    private readonly OpenWindowHandle _mainWindowHandle;
+    private readonly WindowInfo _mainWindowInfo;
+    private readonly DynamicVoxelRenderer _renderer;
 
     public float DeltaTime => _metrics.DeltaTime;
     public double DeltaTimeFull => _metrics.DeltaTimeFull;

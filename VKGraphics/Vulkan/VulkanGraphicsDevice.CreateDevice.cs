@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
@@ -38,7 +38,7 @@ internal unsafe partial class VulkanGraphicsDevice
         // Physical device information
         public VkPhysicalDevice PhysicalDevice;
         public VkPhysicalDeviceProperties PhysicalDeviceProperties;
-        public VkPhysicalDeviceFeatures PhysicalDeviceFeatures;
+        public VkPhysicalDeviceFeatures2 PhysicalDeviceFeatures2 = new();
         public VkPhysicalDeviceMemoryProperties PhysicalDeviceMemoryProperties;
         public QueueFamilyProperties QueueFamilyInfo = new();
 
@@ -71,12 +71,20 @@ internal unsafe partial class VulkanGraphicsDevice
             }
 
             dcs.PhysicalDevice = SelectPhysicalDevice(dcs.Instance, out dcs.PhysicalDeviceProperties);
-            GetPhysicalDeviceFeatures(dcs.PhysicalDevice, &dcs.PhysicalDeviceFeatures);
+            VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures subgroupFeatures = new();
+            VkPhysicalDeviceShaderAtomicInt64Features intAtomic64 = new();
+            VkPhysicalDeviceSynchronization2Features sync2 = new();
+            VkPhysicalDeviceDynamicRenderingFeatures dynamicRender = new();
+            VkPhysicalDeviceVulkan11Features vulkan11Features = new();
+            dcs.PhysicalDeviceFeatures2.pNext = &subgroupFeatures;
+            subgroupFeatures.pNext = &sync2;
+            sync2.pNext = &dynamicRender;
+            dynamicRender.pNext = &intAtomic64;
+            intAtomic64.pNext = &vulkan11Features;
+            GetPhysicalDeviceFeatures2(dcs.PhysicalDevice, &dcs.PhysicalDeviceFeatures2);
             GetPhysicalDeviceMemoryProperties(dcs.PhysicalDevice, &dcs.PhysicalDeviceMemoryProperties);
-            // TODO: GetPhysicalDeviceFeatures2 to properly identify which features are available
-
+            
             dcs.QueueFamilyInfo = IdentifyQueueFamilies(dcs.PhysicalDevice, dcs.Surface);
-
             dcs.Device = CreateLogicalDevice(ref dcs);
 
             return new VulkanGraphicsDevice(ref dcs, swapchainDesc, surfaceExtensionList);
@@ -352,45 +360,21 @@ internal unsafe partial class VulkanGraphicsDevice
                 layerNames.Add(CommonStrings.KhronosValidationLayerName);
             }
 
-            fixed (VkPhysicalDeviceFeatures* pPhysicalDeviceFeatures = &dcs.PhysicalDeviceFeatures)
+            fixed (VkPhysicalDeviceFeatures2* pPhysicalDeviceFeatures = &dcs.PhysicalDeviceFeatures2)
             {
                 var deviceCreateInfo = new VkDeviceCreateInfo()
                 {
                     queueCreateInfoCount = 1,
                     pQueueCreateInfos = &queueCreateInfo,
 
-                    pEnabledFeatures = pPhysicalDeviceFeatures,
-
                     enabledLayerCount = layerNames.Count,
                     ppEnabledLayerNames = (byte**)layerNames.Data,
 
                     enabledExtensionCount = activeExtensionCount,
                     ppEnabledExtensionNames = (byte**)pActiveExtensions,
+                    pEnabledFeatures = null,
+                    pNext = pPhysicalDeviceFeatures,
                 };
-
-                if (dcs.HasDynamicRendering)
-                {
-                    // make sure we enable dynamic rendering
-                    var dynamicRenderingFeatures = new VkPhysicalDeviceDynamicRenderingFeatures()
-                    {
-                        pNext = deviceCreateInfo.pNext,
-                        dynamicRendering = (VkBool32)true,
-                    };
-
-                    deviceCreateInfo.pNext = &dynamicRenderingFeatures;
-                }
-
-                if (dcs.HasSync2Ext)
-                {
-                    // make sure we enable synchronization2
-                    var sync2Features = new VkPhysicalDeviceSynchronization2Features()
-                    {
-                        pNext = deviceCreateInfo.pNext,
-                        synchronization2 = (VkBool32)true,
-                    };
-
-                    deviceCreateInfo.pNext = &sync2Features;
-                }
 
                 VulkanUtil.CheckResult(Vk.CreateDevice(dcs.PhysicalDevice, &deviceCreateInfo, null, &device));
             }

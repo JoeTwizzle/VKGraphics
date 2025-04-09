@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Buffers;
 using System.Runtime.CompilerServices;
@@ -100,7 +100,7 @@ internal sealed partial class VulkanGraphicsDevice : GraphicsDevice
             StructuredBufferMinOffsetAlignment = (uint)_deviceCreateState.PhysicalDeviceProperties.limits.minStorageBufferOffsetAlignment;
             DeviceName = Util.GetString(_deviceCreateState.PhysicalDeviceProperties.deviceName);
             VendorName = $"id:{_deviceCreateState.PhysicalDeviceProperties.vendorID:x8}";
-
+            
             // Then driver properties (if available)
             if (_deviceCreateState.HasDriverPropertiesExt)
             {
@@ -180,26 +180,26 @@ internal sealed partial class VulkanGraphicsDevice : GraphicsDevice
                 _deviceCreateState.PhysicalDeviceProperties.limits.bufferImageGranularity,
                 chunkGranularity: 1024);
 
-            Features = new(
+            Features = new (
                 computeShader: _deviceCreateState.QueueFamilyInfo.MainComputeFamilyIdx >= 0,
-                geometryShader: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures.geometryShader,
-                tessellationShaders: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures.tessellationShader,
-                multipleViewports: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures.multiViewport,
+                geometryShader: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures2.features.geometryShader,
+                tessellationShaders: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures2.features.tessellationShader,
+                multipleViewports: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures2.features.multiViewport,
                 samplerLodBias: true,
                 drawBaseVertex: true,
                 drawBaseInstance: true,
                 drawIndirect: true,
-                drawIndirectBaseInstance: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures.drawIndirectFirstInstance,
-                fillModeWireframe: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures.fillModeNonSolid,
-                samplerAnisotropy: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures.samplerAnisotropy,
-                depthClipDisable: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures.depthClamp,
+                drawIndirectBaseInstance: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures2.features.drawIndirectFirstInstance,
+                fillModeWireframe: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures2.features.fillModeNonSolid,
+                samplerAnisotropy: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures2.features.samplerAnisotropy,
+                depthClipDisable: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures2.features.depthClamp,
                 texture1D: true,
-                independentBlend: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures.independentBlend,
+                independentBlend: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures2.features.independentBlend,
                 structuredBuffer: true,
                 subsetTextureView: true,
                 commandListDebugMarkers: _deviceCreateState.HasDebugMarkerExt,
                 bufferRangeBinding: true,
-                shaderFloat64: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures.shaderFloat64);
+                shaderFloat64: (VkBool32)_deviceCreateState.PhysicalDeviceFeatures2.features.shaderFloat64);
 
             base.ResourceFactory = new VulkanResourceFactory(this);
             _descriptorPoolManager = new(this);

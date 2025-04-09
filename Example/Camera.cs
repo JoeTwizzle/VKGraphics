@@ -115,7 +115,7 @@ sealed class Camera
     bool freeMouse = true;
     float rotation = 0f;
     const float rotationSpeed = 360f / 10f;
-    public void Update(Input input, float dt)
+    public void Update(Input input,RotationReceiver rotationReceiver, float dt)
     {
         float speedRot = 3.4f;
         float speed = 30;
@@ -136,12 +136,7 @@ sealed class Camera
             angleX += input.MouseDelta.X * 0.001f;
             angleY += input.MouseDelta.Y * 0.001f;
         }
-        else
-        {
-            //rotation += rotationSpeed * dt;
-            //rotation %= 360f;
-            //parent.Rotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, ToRadians * rotation);
-        }
+
         if (input.KeyHeld(Scancode.LeftControl))
         {
             speed = 150f;
@@ -196,6 +191,15 @@ sealed class Camera
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }
-        Transform.LocalRotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, angleX) * Quaternion.CreateFromAxisAngle(Vector3.UnitX, angleY);
+        if (freeMouse)
+        {
+            //rotation += rotationSpeed * dt;
+            //rotation %= 360f;
+            transform.Rotation = rotationReceiver.GetRotation();
+        }
+        else
+        {
+            Transform.LocalRotation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, angleX) * Quaternion.CreateFromAxisAngle(Vector3.UnitX, angleY);
+        }
     }
 }

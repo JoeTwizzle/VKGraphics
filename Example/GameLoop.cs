@@ -1,4 +1,4 @@
-﻿using OpenTK.Platform;
+using OpenTK.Platform;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -11,7 +11,7 @@ internal sealed class GameLoop
 {
     public bool ShouldRun;
 
-    const double TicksToSeconds = 1e-7;
+    public const double TicksToSeconds = 1e-7;
     public void Run(ref Metrics metrics, Action updateCallback)
     {
         long prev = Stopwatch.GetTimestamp();

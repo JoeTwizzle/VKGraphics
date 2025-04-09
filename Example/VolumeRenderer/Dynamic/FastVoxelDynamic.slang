@@ -64,10 +64,12 @@ float4 TraceBlock(int64_t chunk, float3 cases, float3 rayPos, float3 rayDir)
         int64_t testPos = 1ull << chunkTest;
         if ((chunk & testPos) != 0ull)
         {
-            float3 p = mapPos + .5 - raySign * .5;
-            float normalIndex = cases.y + 2. * cases.z;
+            float3 p = mapPos + 0.5 - raySign * 0.5;
+            float normalIndex = cases.y + 2.0 * cases.z;
             float3 n = GetNormal(uint(normalIndex), rayDir);
-            float t = (dot(n, p - rayPos)) / dot(n, rayDir) + 0.001;
+            float t = (dot(n, p - rayPos)) / dot(n, rayDir);
+            // float t = min(min(sideDist.x, sideDist.y), sideDist.z) + 0.001;
+
             float3 intersect = (rayPos + rayDir * t);
             if (all(mapPos == int3(rayPos))) // Handle edge case where camera origin is inside of block
             {
@@ -175,7 +177,7 @@ float3 getColorAtRay(Ray ray, out float4 result)
             color = float3(1, 0, 0.8);
             return color;
         }
-        Ray shadowRay = Ray(position + normal * 0.02, dirToSun);
+        Ray shadowRay = Ray(clamp(position + normal * 0.01, floor(position), ceil(position + normal * 0.5)), dirToSun);
         float4 shadowResult = TraceRay(shadowRay);
         if (shadowResult.w == 4)
         {
@@ -189,7 +191,6 @@ float3 getColorAtRay(Ray ray, out float4 result)
         float factor = saturate(dot(float3(normal), dirToSun) * 0.5 + 1);
 
         color = directLight * brightness;
-        // color = shadowResult.xyz;
     }
     else
     {
@@ -212,7 +213,7 @@ float3 GetNormal(uint side, float3 rayDir)
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
-void computeMain(uint3 threadId: SV_DispatchThreadID)
+void computeMains(uint3 threadId: SV_DispatchThreadID)
 {
     int2 resolution;
     screen.GetDimensions(resolution.x, resolution.y);
@@ -231,10 +232,6 @@ void computeMain(uint3 threadId: SV_DispatchThreadID)
     color = getColorAtRay(ray, hitResult);
     if (hitResult.w != -1)
     {
-        // color = hitResult.xyz;
-        ////color = float3(1);
-        ////////color = sign(ray.direction);
-        ////// color = normal;
         float3 normal = GetNormal(uint(hitResult.w), ray.direction);
         ray = Ray(hitResult.xyz + normal, normalize(float3(reflect(ray.direction, normalize(normal)))));
         color += getColorAtRay(ray, hitResult) * 0.5;

@@ -75,7 +75,7 @@ internal static class SpirvCompiler
         slangFile = Path.GetFullPath(slangFile);
         var outputFile = Path.ChangeExtension(slangFile, ".spv");
 
-        string args = $"{slangFile} ";
+        string args = $"{slangFile} -fvk-use-entrypoint-name ";
 #if DEBUG
         args += "-g3 -O0";
 #endif

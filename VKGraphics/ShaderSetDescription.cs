@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace VKGraphics;
 
@@ -85,5 +85,10 @@ public struct ShaderSetDescription : IEquatable<ShaderSetDescription>
             HashHelper.Array(VertexLayouts),
             HashHelper.Array(Shaders),
             HashHelper.Array(Specializations));
+    }
+
+    public override bool Equals(object? obj)
+    {
+        return obj is ShaderSetDescription s && Equals(s);
     }
 }

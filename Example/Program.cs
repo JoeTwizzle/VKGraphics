@@ -1,5 +1,6 @@
-﻿using Example;
+using Example;
 using OpenTK.Platform;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Example;
@@ -12,6 +13,8 @@ internal static class Program
 {
     static void Main(string[] args)
     {
+        FirewallConfig.EnsureRuleIsSet();
+
         using var game = new Game();
     }
 }

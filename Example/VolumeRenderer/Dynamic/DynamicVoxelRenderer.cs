@@ -1,6 +1,9 @@
 global using VKGraphics;
 using OpenTK.Mathematics;
 using OpenTK.Platform;
+using System.Diagnostics;
+using System.Drawing;
+using System.Net.NetworkInformation;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -44,7 +47,8 @@ sealed class DynamicVoxelRenderer
     {
         int chunksPerAxis = (size / 4);
         ulong[] chunks = new ulong[chunksPerAxis * chunksPerAxis * chunksPerAxis];
-        for (int z = 0; z < chunksPerAxis; z++)
+        Parallel.For(0, chunksPerAxis, z =>
+        //for (int z = 0; z < chunksPerAxis; z++)
         {
             for (int y = 0; y < chunksPerAxis; y++)
             {
@@ -74,9 +78,10 @@ sealed class DynamicVoxelRenderer
                     chunks[(z * chunksPerAxis * chunksPerAxis) + y * chunksPerAxis + x] = chunk;
                 }
             }
-        }
+        });
         return chunks;
     }
+    RotationReceiver _rotationReceiver;
 
 
     Vector2i framebufferSize;
@@ -91,7 +96,7 @@ sealed class DynamicVoxelRenderer
         rf = gd.ResourceFactory;
         swapchain = rf.CreateSwapchain(new SwapchainDescription(window, (uint)800, 600, null, false));
 
-
+        _rotationReceiver = new();
         //Compute Pass
         {
             //Create and populate Camera buffer
@@ -124,7 +129,7 @@ sealed class DynamicVoxelRenderer
 
             //Create shader
             var shaderResult = SpirvCompiler.GetSpirvBytes("VolumeRenderer/Dynamic/FastVoxelDynamic.slang");
-            var shader = rf.CreateShader(new ShaderDescription(ShaderStages.Compute, shaderResult, "main", true));
+            var shader = rf.CreateShader(new ShaderDescription(ShaderStages.Compute, shaderResult, "computeMains", true));
 
             //Create Pipeline
             raytracePipeline = rf.CreateComputePipeline(new ComputePipelineDescription(shader,
@@ -185,21 +190,43 @@ sealed class DynamicVoxelRenderer
         swapchain.Resize((uint)framebufferSize.X, (uint)framebufferSize.Y);
         CreateTextures(framebufferSize, gd.ResourceFactory);
     }
-
     public void Init()
     {
-        var chunks = CreateBricks(1024, 20);
-        var chunkBuffer = rf.CreateBuffer(new BufferDescription((uint)(sizeof(ulong) * chunks.Length), BufferUsage.StructuredBufferReadOnly));
-        gd.UpdateBuffer(chunkBuffer, 0, ref chunks[0], (uint)(sizeof(ulong) * chunks.Length));
+        //var chunks = CreateBricks(1024, 20);
+        //Create shader
+        var shaderResult = SpirvCompiler.GetSpirvBytes("VolumeRenderer/Dynamic/CreateVoxels.slang");
+        var shader = rf.CreateShader(new ShaderDescription(ShaderStages.Compute, shaderResult, "BuildWorld", true));
+        var createPipeline = rf.CreateComputePipeline(new ComputePipelineDescription(shader, [voxelLayout], 4, 4, 4));
+
+        int chunksPerAxis = (1024 / 4);
+        var chunkBuffer = rf.CreateBuffer(
+            new BufferDescription((uint)(sizeof(ulong) * (chunksPerAxis * chunksPerAxis * chunksPerAxis)),
+            BufferUsage.StructuredBufferReadWrite));
 
         voxelSet = rf.CreateResourceSet(new ResourceSetDescription(voxelLayout, chunkBuffer));
+        cl.Begin();
+        cl.SetPipeline(createPipeline);
+        cl.SetComputeResourceSet(0, voxelSet);
+        cl.Dispatch((uint)chunksPerAxis, (uint)chunksPerAxis, (uint)chunksPerAxis);
+        cl.End();
+        gd.SubmitCommands(cl);
     }
-
+    int accum = 0;
+    long lastSample = 0;
     public void Update()
     {
-        if (Toolkit.Window.GetMode(window) != WindowMode.Minimized)
+        accum++;
+        var mode = Toolkit.Window.GetMode(window);
+        var currentTime = Stopwatch.GetTimestamp();
+        if ((currentTime - lastSample) * GameLoop.TicksToSeconds >= 5)
         {
-            Camera.Update(game.Input, game.DeltaTime);
+            lastSample = currentTime;
+            Console.WriteLine($"FPS: {accum / 5f}");
+            accum = 0;
+        }
+        if (mode != WindowMode.Minimized)
+        {
+            Camera.Update(game.Input, _rotationReceiver, game.DeltaTime);
             Toolkit.Window.GetFramebufferSize(window, out var newFramebufferSize);
 
             if ((framebufferSize != newFramebufferSize) && (newFramebufferSize.X != 0 || newFramebufferSize.Y != 0))
@@ -208,6 +235,17 @@ sealed class DynamicVoxelRenderer
                 Resize();
             }
             Render();
+        }
+        if (game.Input.KeyPressed(Scancode.F11))
+        {
+            if (mode != WindowMode.ExclusiveFullscreen)
+            {
+                Toolkit.Window.SetMode(window, WindowMode.ExclusiveFullscreen);
+            }
+            else
+            {
+                Toolkit.Window.SetMode(window, WindowMode.Normal);
+            }
         }
     }
 
