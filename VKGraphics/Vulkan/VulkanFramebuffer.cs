@@ -1,5 +1,3 @@
-﻿using System;
-
 using OpenTK.Graphics.Vulkan;
 
 namespace VKGraphics.Vulkan;

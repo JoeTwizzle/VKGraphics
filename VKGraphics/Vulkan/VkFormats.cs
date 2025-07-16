@@ -1,7 +1,6 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
 using OpenTK.Graphics.Vulkan;
-using static OpenTK.Graphics.Vulkan.Vk;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace VKGraphics.Vulkan;
 

@@ -1,10 +1,4 @@
-﻿using OpenTK.Mathematics;
 using OpenTK.Platform;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Example;
 public readonly struct WindowInfo
@@ -55,11 +49,10 @@ internal class WindowHandler
         Toolkit.Window.SetClientSize(window, new(800, 600));
         Toolkit.Window.SetBorderStyle(window, WindowBorderStyle.ResizableBorder);
         Toolkit.Window.SetMode(window, WindowMode.Normal);
-        //TODO: IDK Why this is broken
-        //if (Toolkit.Mouse.SupportsRawMouseMotion)
-        //{
-        //    Toolkit.Mouse.EnableRawMouseMotion(window, true);
-        //}
+        if (Toolkit.Mouse.SupportsRawMouseMotion)
+        {
+            Toolkit.Mouse.EnableRawMouseMotion(window, true);
+        }
         var eventQueue = EventQueue.Subscribe(window);
         int handle;
         if (_recycledHandles.Count > 0)

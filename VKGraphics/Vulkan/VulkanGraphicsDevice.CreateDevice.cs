@@ -1,12 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 
 using OpenTK.Graphics.Vulkan;
-using StackListNI = VKGraphics.Vulkan.StackList<System.IntPtr>;
-using static OpenTK.Graphics.Vulkan.VkStructureType;
-using static OpenTK.Graphics.Vulkan.Vk;
 using OpenTK.Platform;
+using System.Diagnostics;
+using static OpenTK.Graphics.Vulkan.Vk;
+using StackListNI = VKGraphics.Vulkan.StackList<System.IntPtr>;
 
 namespace VKGraphics.Vulkan;
 
@@ -107,7 +104,7 @@ internal unsafe partial class VulkanGraphicsDevice
             {
                 var DestroyDebugReportCallbackEXT =
                     (delegate* unmanaged<VkInstance, VkDebugReportCallbackEXT, VkAllocationCallbacks*, void>)
-                    GetInstanceProcAddr(dcs.Instance, "DestroyDebugReportCallbackEXT"u8);
+                    GetInstanceProcAddr(dcs.Instance, "vkDestroyDebugReportCallbackEXT"u8);
                 DestroyDebugReportCallbackEXT(dcs.Instance, dcs.DebugCallbackHandle, null);
             }
 

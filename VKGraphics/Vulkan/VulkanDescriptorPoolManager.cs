@@ -1,6 +1,5 @@
-﻿using System.Collections.Generic;
-using System.Diagnostics;
 using OpenTK.Graphics.Vulkan;
+using System.Diagnostics;
 using static OpenTK.Graphics.Vulkan.Vk;
 
 namespace VKGraphics.Vulkan;

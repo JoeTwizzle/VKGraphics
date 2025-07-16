@@ -1,5 +1,3 @@
-﻿using System;
-
 namespace VKGraphics;
 
 // A GPU-CPU sync point

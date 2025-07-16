@@ -1,5 +1,3 @@
-using System;
-
 namespace VKGraphics;
 
 /// <summary>

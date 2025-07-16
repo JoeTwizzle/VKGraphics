@@ -2,11 +2,9 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // Modified copy of System/Runtime/InteropServices/SafeHandle.cs
 
-using System;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using System.Threading;
 
 namespace VKGraphics.Vulkan;
 

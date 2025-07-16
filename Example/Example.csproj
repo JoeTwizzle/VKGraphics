@@ -10,8 +10,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="OpenTK" Version="5.0.0-pre.13" />
     <PackageReference Include="System.Numerics.Tensors" Version="9.0.2" />
+    <PackageReference Include="OpenTK" Version="5.0.0-pre.14" />
   </ItemGroup>
 
   <ItemGroup>
@@ -25,9 +25,11 @@
     <None Update="fsTriVert.vert">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+
     <None Update="VolumeRenderer\Dynamic\CreateVoxels.slang">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+
     <None Update="VolumeRenderer\Dynamic\FastVoxelDynamic.slang">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

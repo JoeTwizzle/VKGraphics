@@ -1,6 +1,6 @@
+using Example.VolumeRenderer.Dynamic;
 using OpenTK.Graphics;
 using OpenTK.Platform;
-using Example.VolumeRenderer.Dynamic;
 
 namespace Example;
 internal sealed class Game : IDisposable
@@ -39,7 +39,7 @@ internal sealed class Game : IDisposable
         if (args is CloseEventArgs)
         {
             _gameLoop.ShouldRun = false;
-        }     
+        }
     }
 
     void Initialize()

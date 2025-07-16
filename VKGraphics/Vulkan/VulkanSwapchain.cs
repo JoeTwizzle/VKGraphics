@@ -1,11 +1,8 @@
-﻿using System;
-using System.Buffers;
-using System.Linq;
-using System.Diagnostics;
 using OpenTK.Graphics.Vulkan;
-using static OpenTK.Graphics.Vulkan.VkStructureType;
-using static OpenTK.Graphics.Vulkan.Vk;
 using OpenTK.Platform;
+using System.Buffers;
+using System.Diagnostics;
+using static OpenTK.Graphics.Vulkan.Vk;
 
 namespace VKGraphics.Vulkan;
 
@@ -328,7 +325,7 @@ internal sealed class VulkanSwapchain : Swapchain, IResourceRefCountTarget
 
             if (i < imageCount + 1)
             {
-                var semaphoreCi = new VkSemaphoreCreateInfo() {};
+                var semaphoreCi = new VkSemaphoreCreateInfo() { };
                 VkSemaphore semaphore;
                 VulkanUtil.CheckResult(CreateSemaphore(_gd.Device, &semaphoreCi, null, &semaphore));
                 _semaphores[i] = semaphore;

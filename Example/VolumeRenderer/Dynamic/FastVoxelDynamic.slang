@@ -172,18 +172,11 @@ float3 getColorAtRay(Ray ray, out float4 result)
     {
         float3 position = result.xyz;
         float3 normal = GetNormal(uint(result.w), ray.direction);
-        if (result.w == 4)
-        {
-            color = float3(1, 0, 0.8);
-            return color;
-        }
+
         Ray shadowRay = Ray(clamp(position + normal * 0.01, floor(position), ceil(position + normal * 0.5)), dirToSun);
+
         float4 shadowResult = TraceRay(shadowRay);
-        if (shadowResult.w == 4)
-        {
-            color = float3(0, 1, 0.8);
-            return color;
-        }
+
         const float3 directLight = float3(0.3, 0.9, 0.1);
 
         float brightness = shadowResult.w == -1 ? 1 : 0.2;

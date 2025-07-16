@@ -1,10 +1,7 @@
-﻿using System;
-using System.Diagnostics;
-
 using OpenTK.Graphics.Vulkan;
-using static OpenTK.Graphics.Vulkan.Vk;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Collections.Generic;
+using static OpenTK.Graphics.Vulkan.Vk;
 
 namespace VKGraphics.Vulkan;
 

@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
+using OpenTK.Graphics.Vulkan;
+using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
-using System.Buffers;
 using System.Runtime.CompilerServices;
-
-using OpenTK.Graphics.Vulkan;
+using System.Runtime.InteropServices;
 using static OpenTK.Graphics.Vulkan.Vk;
 
 namespace VKGraphics.Vulkan;

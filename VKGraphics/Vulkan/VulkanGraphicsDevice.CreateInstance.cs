@@ -1,13 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
-using System.Diagnostics;
-
 using OpenTK.Graphics.Vulkan;
-using static OpenTK.Graphics.Vulkan.VkStructureType;
-using static OpenTK.Graphics.Vulkan.Vk;
+using OpenTK.Platform;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using static OpenTK.Graphics.Vulkan.Vk;
 
 namespace VKGraphics.Vulkan;
 
@@ -17,7 +14,6 @@ internal unsafe partial class VulkanGraphicsDevice
     {
         var availInstanceLayers = GetInstanceLayers();
         var availInstanceExtensions = GetInstanceExtensions();
-
         // Identify several extensions we care about
         surfaceExtensions = new();
         if (availInstanceExtensions.Contains(CommonStrings.VK_KHR_portability_subset))
@@ -37,6 +33,11 @@ internal unsafe partial class VulkanGraphicsDevice
         {
             var instanceExtensionPtrs = new List<nint>();
             var instanceLayerPtrs = new List<nint>();
+            ReadOnlySpan<string> requiredExtensions = Toolkit.Vulkan.GetRequiredInstanceExtensions();
+            foreach (var ext in requiredExtensions)
+            {
+                instanceExtensionPtrs.Add(new FixedUtf8String(ext));
+            }
 
             foreach (var ext in surfaceExtensions)
             {
@@ -91,6 +92,14 @@ internal unsafe partial class VulkanGraphicsDevice
                 instanceExtensionPtrs.Add(CommonStrings.VK_KHR_get_physical_device_properties2);
             }
 
+            //Enable MoltenVK on MacOS
+            VkInstanceCreateFlagBits instanceFlags = (VkInstanceCreateFlagBits)0;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                instanceExtensionPtrs.Add(CommonStrings.VK_KHR_portability_enumeration);
+                instanceFlags |= VkInstanceCreateFlagBits.InstanceCreateEnumeratePortabilityBitKhr;
+            }
+
             VkInstance instance;
             fixed (byte* appInfoName = "Veldrid Vk2"u8)
             fixed (IntPtr* ppInstanceExtensions = CollectionsMarshal.AsSpan(instanceExtensionPtrs))
@@ -109,7 +118,7 @@ internal unsafe partial class VulkanGraphicsDevice
                 var instCreateInfo = new VkInstanceCreateInfo()
                 {
                     pApplicationInfo = &appinfo,
-
+                    flags = instanceFlags,
                     enabledExtensionCount = (uint)instanceExtensionPtrs.Count,
                     ppEnabledExtensionNames = (byte**)ppInstanceExtensions,
                     enabledLayerCount = (uint)instanceLayerPtrs.Count,

@@ -1,14 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.Buffers;
-using System.Runtime.CompilerServices;
-using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Threading;
 
 using OpenTK.Graphics.Vulkan;
-using static OpenTK.Graphics.Vulkan.VkStructureType;
+
+using System.Buffers;
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using static OpenTK.Graphics.Vulkan.Vk;
 
 namespace VKGraphics.Vulkan;
@@ -315,7 +312,7 @@ internal sealed partial class VulkanGraphicsDevice : GraphicsDevice
         {
             var DestroyDebugReportCallbackEXT =
                 (delegate* unmanaged<VkInstance, VkDebugReportCallbackEXT, VkAllocationCallbacks*, void>)
-                GetInstanceProcAddr(dcs.Instance, "DestroyDebugReportCallbackEXT"u8);
+                GetInstanceProcAddr(dcs.Instance, "vkDestroyDebugReportCallbackEXT"u8);
             DestroyDebugReportCallbackEXT(dcs.Instance, dcs.DebugCallbackHandle, null);
         }
 
@@ -656,7 +653,7 @@ internal sealed partial class VulkanGraphicsDevice : GraphicsDevice
         }
 
         uint newBufferSize = Math.Max(MinStagingBufferSize, size);
-        var buf =  ResourceFactory.CreateBuffer(
+        var buf = ResourceFactory.CreateBuffer(
             new BufferDescription(newBufferSize, BufferUsage.StagingWrite));
         buf.Name = "Staging Buffer (GraphicsDevice)";
         return buf;
@@ -1277,7 +1274,7 @@ internal sealed partial class VulkanGraphicsDevice : GraphicsDevice
         lock (presentLock)
         {
             var presentResult = QueuePresentKHR(vkSwapchain.PresentQueue, &presentInfo);
-            
+
             if (presentResult
                 is not VkResult.Success
                 and not VkResult.SuboptimalKhr
