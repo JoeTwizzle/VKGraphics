@@ -1,6 +1,3 @@
-﻿using System;
-
-
 namespace VKGraphics.Vulkan;
 
 internal abstract class VulkanFramebufferBase : Framebuffer

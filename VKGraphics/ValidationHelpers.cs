@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 
 namespace VKGraphics;
 
@@ -63,85 +63,85 @@ internal static class ValidationHelpers
         switch (kind)
         {
             case ResourceKind.UniformBuffer:
-            {
-                if (!Util.GetDeviceBuffer(resource, out DeviceBuffer? b)
-                    || (b.Usage & BufferUsage.UniformBuffer) == 0)
                 {
-                    void Throw() => throw new VeldridException(
-                        $"Resource in slot {slot} does not match {nameof(ResourceKind)}.{kind} specified in the {nameof(ResourceLayout)}. " +
-                        $"It must be a {nameof(DeviceBuffer)} or {nameof(DeviceBufferRange)} with " +
-                        $"{nameof(BufferUsage)}.{nameof(BufferUsage.UniformBuffer)}.");
-                    Throw();
+                    if (!Util.GetDeviceBuffer(resource, out DeviceBuffer? b)
+                        || (b.Usage & BufferUsage.UniformBuffer) == 0)
+                    {
+                        void Throw() => throw new VeldridException(
+                            $"Resource in slot {slot} does not match {nameof(ResourceKind)}.{kind} specified in the {nameof(ResourceLayout)}. " +
+                            $"It must be a {nameof(DeviceBuffer)} or {nameof(DeviceBufferRange)} with " +
+                            $"{nameof(BufferUsage)}.{nameof(BufferUsage.UniformBuffer)}.");
+                        Throw();
+                    }
+                    break;
                 }
-                break;
-            }
 
             case ResourceKind.StructuredBufferReadOnly:
-            {
-                if (!Util.GetDeviceBuffer(resource, out DeviceBuffer? b)
-                    || (b.Usage & (BufferUsage.StructuredBufferReadOnly | BufferUsage.StructuredBufferReadWrite)) == 0)
                 {
-                    void Throw() => throw new VeldridException(
-                        $"Resource in slot {slot} does not match {nameof(ResourceKind)}.{kind} specified in " +
-                        $"the {nameof(ResourceLayout)}. It must be a {nameof(DeviceBuffer)} with " +
-                        $"{nameof(BufferUsage)}.{nameof(BufferUsage.StructuredBufferReadOnly)}.");
-                    Throw();
+                    if (!Util.GetDeviceBuffer(resource, out DeviceBuffer? b)
+                        || (b.Usage & (BufferUsage.StructuredBufferReadOnly | BufferUsage.StructuredBufferReadWrite)) == 0)
+                    {
+                        void Throw() => throw new VeldridException(
+                            $"Resource in slot {slot} does not match {nameof(ResourceKind)}.{kind} specified in " +
+                            $"the {nameof(ResourceLayout)}. It must be a {nameof(DeviceBuffer)} with " +
+                            $"{nameof(BufferUsage)}.{nameof(BufferUsage.StructuredBufferReadOnly)}.");
+                        Throw();
+                    }
+                    break;
                 }
-                break;
-            }
 
             case ResourceKind.StructuredBufferReadWrite:
-            {
-                if (!Util.GetDeviceBuffer(resource, out DeviceBuffer? b)
-                    || (b.Usage & BufferUsage.StructuredBufferReadWrite) == 0)
                 {
-                    void Throw() => throw new VeldridException(
-                        $"Resource in slot {slot} does not match {nameof(ResourceKind)} specified in the {nameof(ResourceLayout)}. " +
-                        $"It must be a {nameof(DeviceBuffer)} with {nameof(BufferUsage)}.{nameof(BufferUsage.StructuredBufferReadWrite)}.");
-                    Throw();
+                    if (!Util.GetDeviceBuffer(resource, out DeviceBuffer? b)
+                        || (b.Usage & BufferUsage.StructuredBufferReadWrite) == 0)
+                    {
+                        void Throw() => throw new VeldridException(
+                            $"Resource in slot {slot} does not match {nameof(ResourceKind)} specified in the {nameof(ResourceLayout)}. " +
+                            $"It must be a {nameof(DeviceBuffer)} with {nameof(BufferUsage)}.{nameof(BufferUsage.StructuredBufferReadWrite)}.");
+                        Throw();
+                    }
+                    break;
                 }
-                break;
-            }
 
             case ResourceKind.TextureReadOnly:
-            {
-                if (!(resource.Kind == BindableResourceKind.TextureView && (resource.GetTextureView().Target.Usage & TextureUsage.Sampled) != 0)
-                    && !(resource.Kind == BindableResourceKind.Texture && (resource.GetTexture().Usage & TextureUsage.Sampled) != 0))
                 {
-                    void Throw() => throw new VeldridException(
-                        $"Resource in slot {slot} does not match {nameof(ResourceKind)}.{kind} specified in the " +
-                        $"{nameof(ResourceLayout)}. It must be a {nameof(Texture)} or {nameof(TextureView)} whose target " +
-                        $"has {nameof(TextureUsage)}.{nameof(TextureUsage.Sampled)}.");
-                    Throw();
+                    if (!(resource.Kind == BindableResourceKind.TextureView && (resource.GetTextureView().Target.Usage & TextureUsage.Sampled) != 0)
+                        && !(resource.Kind == BindableResourceKind.Texture && (resource.GetTexture().Usage & TextureUsage.Sampled) != 0))
+                    {
+                        void Throw() => throw new VeldridException(
+                            $"Resource in slot {slot} does not match {nameof(ResourceKind)}.{kind} specified in the " +
+                            $"{nameof(ResourceLayout)}. It must be a {nameof(Texture)} or {nameof(TextureView)} whose target " +
+                            $"has {nameof(TextureUsage)}.{nameof(TextureUsage.Sampled)}.");
+                        Throw();
+                    }
+                    break;
                 }
-                break;
-            }
 
             case ResourceKind.TextureReadWrite:
-            {
-                if (!(resource.Kind == BindableResourceKind.TextureView && (resource.GetTextureView().Target.Usage & TextureUsage.Storage) != 0)
-                    && !(resource.Kind == BindableResourceKind.Texture && (resource.GetTexture().Usage & TextureUsage.Storage) != 0))
                 {
-                    void Throw() => throw new VeldridException(
-                        $"Resource in slot {slot} does not match {nameof(ResourceKind)}.{kind} specified in the " +
-                        $"{nameof(ResourceLayout)}. It must be a {nameof(Texture)} or {nameof(TextureView)} whose target " +
-                        $"has {nameof(TextureUsage)}.{nameof(TextureUsage.Storage)}.");
-                    Throw();
+                    if (!(resource.Kind == BindableResourceKind.TextureView && (resource.GetTextureView().Target.Usage & TextureUsage.Storage) != 0)
+                        && !(resource.Kind == BindableResourceKind.Texture && (resource.GetTexture().Usage & TextureUsage.Storage) != 0))
+                    {
+                        void Throw() => throw new VeldridException(
+                            $"Resource in slot {slot} does not match {nameof(ResourceKind)}.{kind} specified in the " +
+                            $"{nameof(ResourceLayout)}. It must be a {nameof(Texture)} or {nameof(TextureView)} whose target " +
+                            $"has {nameof(TextureUsage)}.{nameof(TextureUsage.Storage)}.");
+                        Throw();
+                    }
+                    break;
                 }
-                break;
-            }
 
             case ResourceKind.Sampler:
-            {
-                if (resource.Kind != BindableResourceKind.Sampler)
                 {
-                    void Throw(BindableResourceKind resourceKind) => throw new VeldridException(
-                        $"Resource in slot {slot} does not match {nameof(ResourceKind)}.{kind} specified in the {nameof(ResourceLayout)}. " +
-                        $"It must be a {nameof(Sampler)} but was {resourceKind}.");
-                    Throw(resource.Kind);
+                    if (resource.Kind != BindableResourceKind.Sampler)
+                    {
+                        void Throw(BindableResourceKind resourceKind) => throw new VeldridException(
+                            $"Resource in slot {slot} does not match {nameof(ResourceKind)}.{kind} specified in the {nameof(ResourceLayout)}. " +
+                            $"It must be a {nameof(Sampler)} but was {resourceKind}.");
+                        Throw(resource.Kind);
+                    }
+                    break;
                 }
-                break;
-            }
 
             default:
                 Illegal.Handle<ResourceKind>();

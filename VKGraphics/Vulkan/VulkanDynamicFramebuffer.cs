@@ -1,9 +1,6 @@
-﻿using System;
-using System.Diagnostics;
-using System.Buffers;
-
 using OpenTK.Graphics.Vulkan;
-using static OpenTK.Graphics.Vulkan.VkStructureType;
+using System.Buffers;
+using System.Diagnostics;
 
 namespace VKGraphics.Vulkan;
 
@@ -81,7 +78,7 @@ internal sealed class VulkanDynamicFramebuffer : VulkanFramebuffer, IResourceRef
                     AccessMask = (loadOp == VkAttachmentLoadOp.AttachmentLoadOpLoad
                         ? VkAccessFlagBits.AccessDepthStencilAttachmentReadBit
                         : 0) | VkAccessFlagBits.AccessDepthStencilAttachmentWriteBit,
-                    StageMask = 
+                    StageMask =
                     VkPipelineStageFlagBits.PipelineStageFragmentShaderBit
                     | VkPipelineStageFlagBits.PipelineStageEarlyFragmentTestsBit
                     | VkPipelineStageFlagBits.PipelineStageLateFragmentTestsBit,

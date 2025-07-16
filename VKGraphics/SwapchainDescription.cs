@@ -1,5 +1,4 @@
-﻿using OpenTK.Platform;
-using System;
+using OpenTK.Platform;
 
 namespace VKGraphics;
 

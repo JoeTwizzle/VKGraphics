@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="OpenTK" Version="5.0.0-pre.13" />
+    <PackageReference Include="OpenTK" Version="5.0.0-pre.14" />
   </ItemGroup>
 
   <ItemGroup>
@@ -22,9 +22,6 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="fsTriVert.vert">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Update="VolumeRenderer\Dynamic\FastVoxelDynamic.comp">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="VolumeRenderer\Dynamic\FastVoxelDynamic.slang">

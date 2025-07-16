@@ -1,8 +1,7 @@
-﻿#if !EXCLUDE_VULKAN_BACKEND
-using System;
+#if !EXCLUDE_VULKAN_BACKEND
+using OpenTK.Graphics.Vulkan;
 using System.Collections.ObjectModel;
 using VKGraphics.Vulkan;
-using OpenTK.Graphics.Vulkan;
 using static OpenTK.Graphics.Vulkan.Vk;
 
 namespace VKGraphics;

@@ -1,5 +1,3 @@
-﻿using System;
-
 namespace VKGraphics.Vulkan;
 
 internal interface ISynchronizedResource : IResourceRefCountTarget

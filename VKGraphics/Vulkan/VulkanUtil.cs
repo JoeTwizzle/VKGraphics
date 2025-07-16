@@ -1,7 +1,5 @@
-﻿using System;
-using System.Diagnostics;
-using System.Threading;
 using OpenTK.Graphics.Vulkan;
+using System.Diagnostics;
 using static OpenTK.Graphics.Vulkan.Vk;
 
 namespace VKGraphics.Vulkan;

@@ -1,13 +1,11 @@
-﻿#if DEBUG
+#if DEBUG
 #define ALLOC_TRACK
 #endif
 
-using System;
-using System.Collections.Generic;
+using OpenTK.Graphics.Vulkan;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using OpenTK.Graphics.Vulkan;
 using static OpenTK.Graphics.Vulkan.Vk;
 using static VKGraphics.Vulkan.VulkanUtil;
 

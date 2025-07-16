@@ -1,4 +1,4 @@
-﻿using OpenTK.Mathematics;
+using OpenTK.Mathematics;
 using OpenTK.Platform;
 
 namespace Example;
@@ -102,9 +102,7 @@ public sealed class Input
     {
         if (args is RawMouseMoveEventArgs rawMouseMoveEvent)
         {
-            const float rawMouseMotionScale = 1.0f / 65536.0f;
-            MouseDelta += rawMouseMoveEvent.Delta * rawMouseMotionScale;
-            Console.WriteLine(rawMouseMoveEvent.Delta);
+            MouseDelta -= rawMouseMoveEvent.Delta;
         }
         else if (args is MouseMoveEventArgs mouseMoveEventArgs)
         {

@@ -1,8 +1,6 @@
-﻿using System;
+using OpenTK.Graphics.Vulkan;
 using System.Buffers;
 using System.Runtime.CompilerServices;
-using OpenTK.Graphics.Vulkan;
-using static OpenTK.Graphics.Vulkan.Vk;
 
 namespace VKGraphics.Vulkan;
 

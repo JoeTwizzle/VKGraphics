@@ -1,5 +1,3 @@
-﻿using System;
-
 namespace VKGraphics;
 
 internal readonly struct MappedResourceCacheKey : IEquatable<MappedResourceCacheKey>

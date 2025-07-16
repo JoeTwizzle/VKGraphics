@@ -1,7 +1,3 @@
-﻿using Example;
-using OpenTK.Platform;
-using System.Diagnostics;
-
 namespace Example;
 
 /// <summary>

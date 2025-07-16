@@ -9,7 +9,7 @@
     <Title>Twizzle.VKGraphics</Title>
     <Authors>JoeTwizzle,nike4613,TechPizzaDev</Authors>
     <PackageId>Twizzle.$(AssemblyName)</PackageId>
-    <Version>1.0.0-pre.13</Version>
+    <Version>1.0.3-pre.14</Version>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
@@ -26,8 +26,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="OpenTK.Graphics" Version="5.0.0-pre.13" />
-    <PackageReference Include="OpenTK.Platform" Version="5.0.0-pre.13" />
+    <PackageReference Include="OpenTK.Graphics" Version="5.0.0-pre.14" />
+    <PackageReference Include="OpenTK.Platform" Version="5.0.0-pre.14" />
   </ItemGroup>
 
 </Project>

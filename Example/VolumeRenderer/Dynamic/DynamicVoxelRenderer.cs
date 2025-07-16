@@ -252,5 +252,6 @@ sealed class DynamicVoxelRenderer
         voxelSet.Dispose();
 
         mainTex.Dispose();
+        gd.Dispose();
     }
 }
