@@ -138,9 +138,9 @@ sealed class DynamicVoxelRenderer
 
         //Blit Pass
         {
-            var vertShaderResult = SpirvCompiler.GetSpirvBytes("fsTriVert.vert");
+            var vertShaderResult = SpirvCompiler.GetSpirvBytes("Shaders/fsTriVert.slang");
             var vertShader = rf.CreateShader(new ShaderDescription(ShaderStages.Vertex, vertShaderResult, "main"));
-            var fragResult = SpirvCompiler.GetSpirvBytes("fsTriFrag.frag");
+            var fragResult = SpirvCompiler.GetSpirvBytes("Shaders/fsTriFrag.slang");
             var fragShader = rf.CreateShader(new ShaderDescription(ShaderStages.Fragment, fragResult, "main"));
 
             //Display layout
@@ -238,9 +238,9 @@ sealed class DynamicVoxelRenderer
         }
         if (game.Input.KeyPressed(Scancode.F11))
         {
-            if (mode != WindowMode.ExclusiveFullscreen)
+            if (mode != WindowMode.WindowedFullscreen)
             {
-                Toolkit.Window.SetMode(window, WindowMode.ExclusiveFullscreen);
+                Toolkit.Window.SetMode(window, WindowMode.WindowedFullscreen);
             }
             else
             {
