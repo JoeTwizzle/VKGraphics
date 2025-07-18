@@ -14,7 +14,7 @@ internal static class Program
 {
     static void Main(string[] args)
     {
-        FirewallConfig.EnsureRuleIsSet();
+        //FirewallConfig.EnsureRuleIsSet();
 
         using var game = new Game();
     }
