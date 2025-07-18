@@ -1,4 +1,4 @@
-using Example.VolumeRenderer.Dynamic;
+using Example.Voxels;
 using OpenTK.Graphics;
 using OpenTK.Platform;
 

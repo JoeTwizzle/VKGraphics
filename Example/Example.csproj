@@ -26,11 +26,11 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
 
-    <None Update="VolumeRenderer\Dynamic\CreateVoxels.slang">
+    <None Update="Shaders\CreateVoxels.slang">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
 
-    <None Update="VolumeRenderer\Dynamic\FastVoxelDynamic.slang">
+    <None Update="Shaders\FastVoxelDynamic.slang">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

@@ -8,7 +8,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Example.VolumeRenderer.Dynamic;
+namespace Example.Voxels;
 
 sealed class DynamicVoxelRenderer
 {
@@ -36,8 +36,8 @@ sealed class DynamicVoxelRenderer
     ResourceSet displaySet;
     readonly Pipeline displayPipline;
     readonly Swapchain swapchain;
+    readonly ResourceFactory rf;
     public Camera Camera { get; }
-    ResourceFactory rf;
     static uint GetUBOSize(int size)
     {
         return (uint)(((size - 1) / 16 + 1) * 16);
@@ -45,7 +45,7 @@ sealed class DynamicVoxelRenderer
 
     static ulong[] CreateBricks(int size, float scale)
     {
-        int chunksPerAxis = (size / 4);
+        int chunksPerAxis = size / 4;
         ulong[] chunks = new ulong[chunksPerAxis * chunksPerAxis * chunksPerAxis];
         Parallel.For(0, chunksPerAxis, z =>
         //for (int z = 0; z < chunksPerAxis; z++)
@@ -65,17 +65,17 @@ sealed class DynamicVoxelRenderer
                             float term = (MathF.Sin(xFinal) * 0.5f + 1 + zfactor + 1) * 40 + 256;
                             for (int ly = 0; ly < 4; ly++)
                             {
-                                int chunkIndex = (lz * 4 * 4) + ly * 4 + lx;
-                                float yFinal = (y * 4 + ly);
+                                int chunkIndex = lz * 4 * 4 + ly * 4 + lx;
+                                float yFinal = y * 4 + ly;
 
                                 if (term > yFinal)
                                 {
-                                    chunk |= 1ul << (chunkIndex);
+                                    chunk |= 1ul << chunkIndex;
                                 }
                             }
                         }
                     }
-                    chunks[(z * chunksPerAxis * chunksPerAxis) + y * chunksPerAxis + x] = chunk;
+                    chunks[z * chunksPerAxis * chunksPerAxis + y * chunksPerAxis + x] = chunk;
                 }
             }
         });
@@ -94,7 +94,7 @@ sealed class DynamicVoxelRenderer
         gd = GraphicsDevice.CreateVulkan(
             new GraphicsDeviceOptions(true, null, false, ResourceBindingModel.Improved, true, false));
         rf = gd.ResourceFactory;
-        swapchain = rf.CreateSwapchain(new SwapchainDescription(window, (uint)800, 600, null, false));
+        swapchain = rf.CreateSwapchain(new SwapchainDescription(window, 800, 600, null, false));
 
         _rotationReceiver = new();
         //Compute Pass
@@ -128,7 +128,7 @@ sealed class DynamicVoxelRenderer
                 ));
 
             //Create shader
-            var shaderResult = SpirvCompiler.GetSpirvBytes("VolumeRenderer/Dynamic/FastVoxelDynamic.slang");
+            var shaderResult = SpirvCompiler.GetSpirvBytes("Shaders/FastVoxelDynamic.slang");
             var shader = rf.CreateShader(new ShaderDescription(ShaderStages.Compute, shaderResult, "computeMains", true));
 
             //Create Pipeline
@@ -194,13 +194,13 @@ sealed class DynamicVoxelRenderer
     {
         //var chunks = CreateBricks(1024, 20);
         //Create shader
-        var shaderResult = SpirvCompiler.GetSpirvBytes("VolumeRenderer/Dynamic/CreateVoxels.slang");
+        var shaderResult = SpirvCompiler.GetSpirvBytes("Shaders/CreateVoxels.slang");
         var shader = rf.CreateShader(new ShaderDescription(ShaderStages.Compute, shaderResult, "BuildWorld", true));
         var createPipeline = rf.CreateComputePipeline(new ComputePipelineDescription(shader, [voxelLayout], 4, 4, 4));
 
-        int chunksPerAxis = (1024 / 4);
+        int chunksPerAxis = 1024 / 4;
         var chunkBuffer = rf.CreateBuffer(
-            new BufferDescription((uint)(sizeof(ulong) * (chunksPerAxis * chunksPerAxis * chunksPerAxis)),
+            new BufferDescription((uint)(sizeof(ulong) * chunksPerAxis * chunksPerAxis * chunksPerAxis),
             BufferUsage.StructuredBufferReadWrite));
 
         voxelSet = rf.CreateResourceSet(new ResourceSetDescription(voxelLayout, chunkBuffer));
@@ -229,7 +229,7 @@ sealed class DynamicVoxelRenderer
             Camera.Update(game.Input, _rotationReceiver, game.DeltaTime);
             Toolkit.Window.GetFramebufferSize(window, out var newFramebufferSize);
 
-            if ((framebufferSize != newFramebufferSize) && (newFramebufferSize.X != 0 || newFramebufferSize.Y != 0))
+            if (framebufferSize != newFramebufferSize && (newFramebufferSize.X != 0 || newFramebufferSize.Y != 0))
             {
                 framebufferSize = newFramebufferSize;
                 Resize();

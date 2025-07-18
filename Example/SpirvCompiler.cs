@@ -69,9 +69,9 @@ internal static class SpirvCompiler
         var outputFile = Path.ChangeExtension(slangFile, ".spv");
 
         string args = $"{slangFile} -fvk-use-entrypoint-name ";
-#if DEBUG
-        args += "-g3 -O0";
-#endif
+//#if DEBUG
+        //args += "-g3 -O0";
+//#endif
         args += $" -o {outputFile}";
         ProcessStartInfo psi = new()
         {
