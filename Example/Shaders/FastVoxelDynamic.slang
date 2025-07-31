@@ -291,7 +291,7 @@ float3 getColorAtRay(Ray ray, out float4 result, bool includeGI)
                 float3 giDir = GetFixedDirection(i, normal);
 
                 Ray giRay = Ray(giPos, giDir);
-                float4 giHit = TraceRay(giRay, 32);
+                float4 giHit = TraceRay(giRay, 24);
                 if (giHit.w == -1)
                 {
                     giLight += GetSkyColor(giRay.direction, dirToSun) * albedo.rgb + albedo.rgb * (albedo.w - 1.0);

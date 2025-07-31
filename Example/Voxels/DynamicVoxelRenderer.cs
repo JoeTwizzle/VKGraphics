@@ -213,6 +213,7 @@ sealed class DynamicVoxelRenderer
     }
     int accum = 0;
     long lastSample = 0;
+    WindowMode prevMode = WindowMode.Normal;
     public void Update()
     {
         accum++;
@@ -240,11 +241,12 @@ sealed class DynamicVoxelRenderer
         {
             if (mode != WindowMode.WindowedFullscreen)
             {
+                prevMode = Toolkit.Window.GetMode(window);
                 Toolkit.Window.SetMode(window, WindowMode.WindowedFullscreen);
             }
             else
             {
-                Toolkit.Window.SetMode(window, WindowMode.Normal);
+                Toolkit.Window.SetMode(window, prevMode);
             }
         }
     }
