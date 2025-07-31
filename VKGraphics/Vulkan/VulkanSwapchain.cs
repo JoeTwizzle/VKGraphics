@@ -21,11 +21,14 @@ internal sealed class VulkanSwapchain : Swapchain, IResourceRefCountTarget
     private uint _fenceIndex;
     private uint _currentImageIndex;
     private uint _imageCount;
+    private int _presentTargetQueueLength;
 
     private readonly WindowHandle _swapchainSource;
     private readonly bool _colorSrgb;
     private bool _syncToVBlank;
     private bool? _newSyncToVBlank;
+    private bool _useFifoLatestIfAvailable;
+    private bool? _newUseFifoLatestIfAvailable;
 
     private string? _name;
     public ResourceRefCount RefCount { get; }
@@ -125,6 +128,19 @@ internal sealed class VulkanSwapchain : Swapchain, IResourceRefCountTarget
         }
     }
 
+    public bool UseFifoLatestIfAvailable
+    {
+        get => _newUseFifoLatestIfAvailable ?? _useFifoLatestIfAvailable;
+
+        set
+        {
+            if (_useFifoLatestIfAvailable != value)
+            {
+                _newUseFifoLatestIfAvailable = value;
+            }
+        }
+    }
+
     private unsafe bool CreateSwapchain(uint width, uint height)
     {
         var physicalDevice = _gd._deviceCreateState.PhysicalDevice;
@@ -143,10 +159,22 @@ internal sealed class VulkanSwapchain : Swapchain, IResourceRefCountTarget
             return false;
         }
 
-        if (_deviceSwapchain != VkSwapchainKHR.Zero)
+        /*
+        if (_deviceSwapchain != VkSwapchainKHR.NULL)
         {
-            _gd.WaitForIdle();
+            if (_fences.Length > 0)
+            {
+                fixed (VkFence* pFences = _fences)
+                {
+                    vkWaitForFences(_gd.Device, _imageCount + 1, pFences, 1, ulong.MaxValue);
+                }
+            }
+            else
+            {
+                _gd.WaitForIdle();
+            }
         }
+        */
 
         _currentImageIndex = 0;
         var surfaceFormatCount = 0u;
@@ -196,11 +224,21 @@ internal sealed class VulkanSwapchain : Swapchain, IResourceRefCountTarget
             VulkanUtil.CheckResult(GetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, _surface, &presentModeCount, presentModesPtr));
         }
 
+        uint maxImageCount = surfaceCapabilities.maxImageCount == 0 ? uint.MaxValue : surfaceCapabilities.maxImageCount;
+        // TODO: it would maybe be a good idea to enable this to be configurable?
+        uint imageCount = Math.Min(maxImageCount, surfaceCapabilities.minImageCount + 1);
         VkPresentModeKHR presentMode = VkPresentModeKHR.PresentModeFifoKhr;
-
+        _presentTargetQueueLength = 0;
         if (_syncToVBlank)
         {
-            if (presentModes.Contains(VkPresentModeKHR.PresentModeFifoRelaxedKhr))
+            const VkPresentModeKHR VK_PRESENT_MODE_FIFO_LATEST_READY_EXT = VkPresentModeKHR.PresentModeFifoLatestReadyKhr;
+            // TODO: figure out how to throttle sanely with FIFO_LATEST_READY
+            if (_useFifoLatestIfAvailable && _gd._deviceCreateState.HasFifoLatestReady && presentModes.Contains(VK_PRESENT_MODE_FIFO_LATEST_READY_EXT))
+            {
+                presentMode = VK_PRESENT_MODE_FIFO_LATEST_READY_EXT;
+                _presentTargetQueueLength = 1;
+            }
+            else if (presentModes.Contains(VkPresentModeKHR.PresentModeFifoRelaxedKhr))
             {
                 presentMode = VkPresentModeKHR.PresentModeFifoRelaxedKhr;
             }
@@ -210,16 +248,15 @@ internal sealed class VulkanSwapchain : Swapchain, IResourceRefCountTarget
             if (presentModes.Contains(VkPresentModeKHR.PresentModeMailboxKhr))
             {
                 presentMode = VkPresentModeKHR.PresentModeMailboxKhr;
+                _presentTargetQueueLength = (int)imageCount;
             }
             else if (presentModes.Contains(VkPresentModeKHR.PresentModeImmediateKhr))
             {
                 presentMode = VkPresentModeKHR.PresentModeImmediateKhr;
+                _presentTargetQueueLength = (int)imageCount;
             }
         }
 
-        uint maxImageCount = surfaceCapabilities.maxImageCount == 0 ? uint.MaxValue : surfaceCapabilities.maxImageCount;
-        // TODO: it would maybe be a good idea to enable this to be configurable?
-        uint imageCount = Math.Min(maxImageCount, surfaceCapabilities.minImageCount + 1);
 
         uint clampedWidth = Util.Clamp(width, surfaceCapabilities.minImageExtent.width, surfaceCapabilities.maxImageExtent.width);
         uint clampedHeight = Util.Clamp(height, surfaceCapabilities.minImageExtent.height, surfaceCapabilities.maxImageExtent.height);
@@ -280,7 +317,7 @@ internal sealed class VulkanSwapchain : Swapchain, IResourceRefCountTarget
         // as a last step, we need to set up our fences and semaphores
         var oldFenceCount = _fences.Length;
         var oldSemaphoreCount = _semaphores.Length;
-        Util.EnsureArrayMinimumSize(ref _fences, imageCount);
+        Util.EnsureArrayMinimumSize(ref _fences, imageCount + 1);
         Util.EnsureArrayMinimumSize(ref _semaphores, imageCount + 1);
         _fenceIndex = 0;
 
@@ -292,7 +329,6 @@ internal sealed class VulkanSwapchain : Swapchain, IResourceRefCountTarget
         oldFenceCount = 0;
         oldSemaphoreCount = 0;
 
-        // TODO: this re-creation is BAD. We need to (somehow or other) force a sync and wait for it before destroying these fences and semaphores.
         for (var i = 0; i < _fences.Length; i++)
         {
             if (_fences[i] != VkFence.Zero)
@@ -302,7 +338,7 @@ internal sealed class VulkanSwapchain : Swapchain, IResourceRefCountTarget
                 _fences[i] = VkFence.Zero;
             }
 
-            if (i < imageCount)
+            if (i < imageCount + 1)
             {
                 var fenceCi = new VkFenceCreateInfo()
                 {
@@ -352,9 +388,20 @@ internal sealed class VulkanSwapchain : Swapchain, IResourceRefCountTarget
             RecreateAndReacquire(_framebuffer.Width, _framebuffer.Height);
             return false;
         }
+        if (_newUseFifoLatestIfAvailable != null)
+        {
+            _useFifoLatestIfAvailable = _newUseFifoLatestIfAvailable.Value;
+            _newUseFifoLatestIfAvailable = null;
+            RecreateAndReacquire(_framebuffer.Width, _framebuffer.Height);
+            return false;
+        }
 
+        // first, wait for the fence corresponding to the image slot (not to be confused with the image index!) that we'll acquire
+        // _presentTargetQueueLength determines how many frames we want to keep in the queue at a time, so how far back we should look before waiting.
+        // For standard FIFO-like present (a.k.a. vsync), this is 1. For PRESENT_LATEST, it's 2. For non-vsync, it's the image count.
+        var fenceIndex = (_fenceIndex + (uint)_fences.Length - _presentTargetQueueLength) % (uint)_fences.Length;
         // first, wait for the i - N'th fence (which mod N is just the current fence, and the one we will be passing to acquire)
-        var waitFence = _fences[_fenceIndex];
+        var waitFence = _fences[fenceIndex];
         _ = WaitForFences(_gd.Device, 1, &waitFence, 1, ulong.MaxValue);
         _ = ResetFences(_gd.Device, 1, &waitFence);
 
@@ -373,22 +420,24 @@ internal sealed class VulkanSwapchain : Swapchain, IResourceRefCountTarget
             semaphore,
             waitFence,
             &imageIndex);
+
         _framebuffer.SetImageIndex(imageIndex, semaphore);
         _currentImageIndex = imageIndex;
         // swap this semaphore into position
         _semaphores[_imageCount] = _semaphores[imageIndex];
         _semaphores[imageIndex] = semaphore;
         // and move our fence index forward
-        _fenceIndex = (_fenceIndex + 1) % _imageCount;
+        _fences[_imageCount] = _fences[imageIndex];
+        _fences[imageIndex] = waitFence;
 
         if (result is VkResult.ErrorOutOfDateKhr or VkResult.SuboptimalKhr)
         {
             CreateSwapchain(_framebuffer.Width, _framebuffer.Height);
             return false;
         }
-        else if (result != VkResult.Success)
+        else
         {
-            throw new VeldridException("Could not acquire next image from the Vulkan swapchain.");
+            VulkanUtil.CheckResult(result);
         }
 
         return true;
