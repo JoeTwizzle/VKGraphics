@@ -47,6 +47,7 @@ internal unsafe partial class VulkanGraphicsDevice
         public bool HasDriverPropertiesExt;
         public bool HasDynamicRendering;
         public bool HasSync2Ext;
+        public bool HasFifoLatestReady;
     }
 
     public static VulkanGraphicsDevice CreateDevice(GraphicsDeviceOptions gdOpts, VulkanDeviceOptions vkOpts, SwapchainDescription? swapchainDesc)
@@ -294,6 +295,10 @@ internal unsafe partial class VulkanGraphicsDevice
                     case "VK_KHR_portability_subset":
                         goto EnableExtension;
 
+                    case "VK_EXT_present_mode_fifo_latest_ready":
+                        dcs.HasFifoLatestReady = true;
+                        goto EnableExtension;
+
                     case "VK_KHR_maintenance1":
                         dcs.HasMaintenance1Ext = true;
                         goto EnableExtension;
@@ -386,6 +391,16 @@ internal unsafe partial class VulkanGraphicsDevice
                     };
 
                     deviceCreateInfo.pNext = &sync2Features;
+                }
+
+                if (dcs.HasFifoLatestReady)
+                {
+                    var fifoLatestReady = new VkPhysicalDevicePresentModeFifoLatestReadyFeaturesEXT()
+                    {
+                        pNext = deviceCreateInfo.pNext,
+                        presentModeFifoLatestReady = (VkBool32)true,
+                    };
+                    deviceCreateInfo.pNext = &fifoLatestReady;
                 }
 
                 VulkanUtil.CheckResult(Vk.CreateDevice(dcs.PhysicalDevice, &deviceCreateInfo, null, &device));

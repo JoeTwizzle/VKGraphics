@@ -1,7 +1,8 @@
-using OpenTK.Graphics.Vulkan;
+    using OpenTK.Graphics.Vulkan;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using static OpenTK.Graphics.Vulkan.Vk;
@@ -38,7 +39,7 @@ internal sealed partial class VulkanGraphicsDevice : GraphicsDevice
 
     private readonly Dictionary<MappableResource, ResourceMapping> _mappedResources = new();
     private readonly object _mappedResourcesLock = new();
-
+    private readonly Lazy<BackendInfoVulkan> _lazyBackendInfo;
 #if DEBUG
     internal readonly ConcurrentDictionary<VkImage, WeakReference<VulkanTexture>> NativeToManagedImages = new();
 #endif
@@ -210,6 +211,8 @@ internal sealed partial class VulkanGraphicsDevice : GraphicsDevice
 
             EagerlyAllocateSomeResources();
             PostDeviceCreated();
+
+            _lazyBackendInfo = new(() => new(this), LazyThreadSafetyMode.ExecutionAndPublication);
         }
         catch
         {
@@ -375,6 +378,12 @@ internal sealed partial class VulkanGraphicsDevice : GraphicsDevice
 
             VulkanUtil.CheckResult(vkDebugMarkerSetObjectNameEXT(Device, &nameInfo));
         }
+    }
+
+    public override bool GetVulkanInfo([MaybeNullWhen(false)] out BackendInfoVulkan info)
+    {
+        info = _lazyBackendInfo.Value;
+        return true;
     }
 
     internal unsafe VkCommandPool CreateCommandPool(bool transient)
@@ -1274,8 +1283,7 @@ internal sealed partial class VulkanGraphicsDevice : GraphicsDevice
             var presentResult = QueuePresentKHR(vkSwapchain.PresentQueue, &presentInfo);
 
             if (presentResult
-                is not VkResult.Success
-                and not VkResult.SuboptimalKhr
+                is not VkResult.SuboptimalKhr
                 and not VkResult.ErrorOutOfDateKhr)
             {
                 VulkanUtil.ThrowResult(presentResult);
